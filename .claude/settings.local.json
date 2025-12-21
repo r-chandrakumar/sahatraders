@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run dev:*)",
+      "Bash(dir \"C:\\Web Applications\\New folder own\\sahaa traders\\admin-app\\src\\app\\products\" /s /b)",
+      "Bash(dir \"C:\\Web Applications\\New folder own\\sahaa traders\\admin-app\\src\\app\" /b)",
+      "Bash(ls:*)",
+      "Bash(node src/database/fix-variants.js:*)",
+      "Bash(node:*)",
+      "Bash(curl:*)",
+      "Bash(npm install:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

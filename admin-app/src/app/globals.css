@@ -1,0 +1,149 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 35, 39, 47;
+  --background-rgb: 248, 249, 250;
+}
+
+/* Prevent FOUC */
+html {
+  height: 100%;
+  overflow: hidden;
+  visibility: visible;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: rgb(var(--background-rgb));
+  height: 100%;
+  overflow: hidden;
+  min-height: 100vh;
+}
+
+#__next {
+  height: 100%;
+}
+
+/* Prevent layout shift during hydration */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a1a1a1;
+}
+
+/* Ant Design overrides */
+.ant-layout-sider {
+  background: #001529 !important;
+}
+
+.ant-menu-dark {
+  background: transparent !important;
+}
+
+.ant-layout-header {
+  background: #fff !important;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+/* Dashboard card styles */
+.dashboard-card {
+  @apply bg-white rounded-lg shadow-sm border border-gray-100;
+}
+
+.dashboard-card:hover {
+  @apply shadow-md;
+  transition: all 0.3s ease;
+}
+
+/* Stat card */
+.stat-card {
+  @apply p-6 rounded-lg;
+}
+
+/* Status badges */
+.status-badge {
+  @apply px-2.5 py-0.5 rounded-full text-xs font-medium;
+}
+
+.status-enquiry {
+  @apply bg-blue-100 text-blue-800;
+}
+
+.status-confirmed {
+  @apply bg-yellow-100 text-yellow-800;
+}
+
+.status-processing {
+  @apply bg-orange-100 text-orange-800;
+}
+
+.status-shipped {
+  @apply bg-purple-100 text-purple-800;
+}
+
+.status-delivered {
+  @apply bg-green-100 text-green-800;
+}
+
+.status-cancelled {
+  @apply bg-red-100 text-red-800;
+}
+
+/* Table styles */
+.ant-table-thead > tr > th {
+  background: #fafafa !important;
+  font-weight: 600 !important;
+}
+
+/* Form styles */
+.form-section {
+  @apply bg-white p-6 rounded-lg shadow-sm mb-6;
+}
+
+.form-section-title {
+  @apply text-lg font-semibold mb-4 pb-2 border-b;
+}
+
+/* Page header */
+.page-header {
+  @apply mb-6;
+}
+
+.page-title {
+  @apply text-2xl font-bold text-gray-900;
+}
+
+.page-subtitle {
+  @apply text-gray-500 mt-1;
+}
+
+/* Low stock indicator */
+.low-stock {
+  @apply text-red-600 font-medium;
+}
+
+/* Action buttons */
+.action-btn {
+  @apply px-3 py-1 rounded text-sm;
+}
