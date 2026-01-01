@@ -8,7 +8,7 @@ export const getImageUrl = (imagePath, placeholder = '/images/placeholder-produc
   }
 
   // If it's an API uploaded image
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.sahatrades.in';
   if (imagePath.startsWith('/uploads/')) {
     return `${API_URL.replace('/api', '')}${imagePath}`;
   }
