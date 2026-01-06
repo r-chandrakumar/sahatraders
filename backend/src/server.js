@@ -36,9 +36,9 @@ app.use(helmet());
 const allowedOrigins = [
   ...(process.env.PUBLIC_SITE_URL?.split(',') || []),
   ...(process.env.ADMIN_APP_URL?.split(',') || []),
-  'http://localhost:3000',
-  'http://localhost:3001',
-  'http://localhost:3002'
+  'https://sahatrades.in',
+  'https://api.sahatrades.in'
+  
 ].filter(Boolean);
 
 app.use(cors({
