@@ -8,7 +8,8 @@
       "Bash(node src/database/fix-variants.js:*)",
       "Bash(node:*)",
       "Bash(curl:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(timeout:*)"
     ],
     "deny": [],
     "ask": []
