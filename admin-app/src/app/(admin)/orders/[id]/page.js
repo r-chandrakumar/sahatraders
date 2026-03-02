@@ -9,7 +9,6 @@ import {
   Tag,
   Table,
   Timeline,
-  Descriptions,
   Space,
   Modal,
   Form,
@@ -25,18 +24,18 @@ import {
   ArrowLeftOutlined,
   PrinterOutlined,
   EditOutlined,
-  CheckOutlined,
-  CloseOutlined,
-  TruckOutlined,
   DollarOutlined,
   PhoneOutlined,
   MailOutlined,
   EnvironmentOutlined,
   FileTextOutlined,
   UserOutlined,
+  SendOutlined,
+  BellOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import toast from 'react-hot-toast';
+import api from '@/lib/api';
 
 const { TextArea } = Input;
 
@@ -49,81 +48,12 @@ const statusColors = {
   cancelled: 'red',
 };
 
-const statusSteps = ['pending', 'confirmed', 'processing', 'shipped', 'delivered'];
+const statusSteps = ['confirmed', 'processing', 'shipped', 'delivered'];
 
 const paymentStatusColors = {
   unpaid: 'red',
   partial: 'orange',
   paid: 'green',
-};
-
-// Sample order data
-const sampleOrder = {
-  id: 1,
-  order_number: 'SO-202512-0089',
-  status: 'processing',
-  payment_status: 'partial',
-  customer_name: 'Ramesh Patel',
-  customer_email: 'ramesh@example.com',
-  customer_phone: '9876543210',
-  shipping_address: '123 Main Street, Sector 5, Jaipur, Rajasthan - 302001',
-  billing_address: '123 Main Street, Sector 5, Jaipur, Rajasthan - 302001',
-  subtotal: 15000,
-  tax_amount: 2700,
-  discount_amount: 500,
-  shipping_charge: 150,
-  total_amount: 17350,
-  paid_amount: 10000,
-  notes: 'Please deliver before 5 PM',
-  created_at: '2025-12-03T10:30:00',
-  updated_at: '2025-12-04T14:20:00',
-  items: [
-    {
-      id: 1,
-      product_name: 'Premium Cumin Seeds',
-      variant_name: '500g Pack',
-      sku: 'CUM-500',
-      quantity: 20,
-      unit_price: 450,
-      tax_rate: 18,
-      discount: 0,
-      total: 10620,
-    },
-    {
-      id: 2,
-      product_name: 'Black Pepper Premium',
-      variant_name: '250g Pack',
-      sku: 'BPP-250',
-      quantity: 10,
-      unit_price: 380,
-      tax_rate: 18,
-      discount: 500,
-      total: 3980,
-    },
-    {
-      id: 3,
-      product_name: 'Groundnut Oil',
-      variant_name: '5L Can',
-      sku: 'GNO-5L',
-      quantity: 5,
-      unit_price: 650,
-      tax_rate: 5,
-      discount: 0,
-      total: 3412.50,
-    },
-  ],
-  timeline: [
-    { date: '2025-12-03T10:30:00', status: 'pending', note: 'Order placed' },
-    { date: '2025-12-03T11:15:00', status: 'confirmed', note: 'Order confirmed by admin' },
-    { date: '2025-12-04T09:00:00', status: 'processing', note: 'Items being packed' },
-  ],
-  payments: [
-    { id: 1, amount: 5000, method: 'bank_transfer', reference: 'TXN123456', date: '2025-12-03T12:00:00' },
-    { id: 2, amount: 5000, method: 'cash', reference: null, date: '2025-12-04T10:00:00' },
-  ],
-  invoices: [
-    { id: 1, invoice_number: 'INV-202512-0089', amount: 17350, status: 'partial', date: '2025-12-03T11:30:00' },
-  ],
 };
 
 export default function OrderDetailPage() {
@@ -133,44 +63,118 @@ export default function OrderDetailPage() {
   const [loading, setLoading] = useState(true);
   const [statusModal, setStatusModal] = useState(false);
   const [paymentModal, setPaymentModal] = useState(false);
+  const [invoiceLoading, setInvoiceLoading] = useState(false);
+  const [notifyModal, setNotifyModal] = useState(false);
+  const [notifyLoading, setNotifyLoading] = useState(false);
   const [form] = Form.useForm();
   const [paymentForm] = Form.useForm();
 
   useEffect(() => {
-    // Simulate API fetch
-    setTimeout(() => {
-      setOrder(sampleOrder);
-      setLoading(false);
-    }, 500);
+    fetchOrder();
   }, [params.id]);
 
-  const handleStatusUpdate = (values) => {
-    setOrder({ ...order, status: values.status });
-    setStatusModal(false);
-    toast.success('Order status updated');
+  const fetchOrder = async () => {
+    setLoading(true);
+    try {
+      const response = await api.get(`/admin/sales-orders/${params.id}`);
+      const orderData = response.data.data || response.data;
+      setOrder(orderData);
+    } catch (error) {
+      console.error('Error fetching order:', error);
+      toast.error('Failed to load order details');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handlePaymentRecord = (values) => {
-    const newPayment = {
-      id: order.payments.length + 1,
-      ...values,
-      date: new Date().toISOString(),
-    };
-    const newPaidAmount = order.paid_amount + values.amount;
-    setOrder({
-      ...order,
-      payments: [...order.payments, newPayment],
-      paid_amount: newPaidAmount,
-      payment_status: newPaidAmount >= order.total_amount ? 'paid' : 'partial',
-    });
-    setPaymentModal(false);
-    paymentForm.resetFields();
-    toast.success('Payment recorded successfully');
+  const handleStatusUpdate = async (values) => {
+    try {
+      await api.put(`/admin/sales-orders/${params.id}/status`, { status: values.status });
+      toast.success('Order status updated');
+      setStatusModal(false);
+      fetchOrder();
+    } catch (error) {
+      console.error('Error updating status:', error);
+      toast.error(error.response?.data?.message || 'Failed to update status');
+    }
+  };
+
+  const handleGenerateInvoice = async () => {
+    setInvoiceLoading(true);
+    try {
+      await api.post('/admin/invoices', {
+        sales_order_id: order.id,
+        due_date: dayjs().add(30, 'day').format('YYYY-MM-DD'),
+      });
+      toast.success('Invoice generated');
+      fetchOrder();
+    } catch (error) {
+      console.error('Error generating invoice:', error);
+      toast.error(error.response?.data?.message || 'Failed to generate invoice');
+    } finally {
+      setInvoiceLoading(false);
+    }
+  };
+
+  const handlePaymentRecord = async (values) => {
+    const invoice = order.invoices?.[0];
+    if (!invoice) {
+      toast.error('Please generate an invoice first');
+      return;
+    }
+    try {
+      await api.post(`/admin/invoices/${invoice.id}/payments`, {
+        amount: values.amount,
+        payment_method: values.payment_method,
+        payment_date: dayjs().format('YYYY-MM-DD'),
+        reference: values.reference || null,
+        notes: values.notes || null,
+      });
+      toast.success('Payment recorded');
+      setPaymentModal(false);
+      paymentForm.resetFields();
+      fetchOrder();
+    } catch (error) {
+      console.error('Error recording payment:', error);
+      toast.error(error.response?.data?.message || 'Failed to record payment');
+    }
+  };
+
+  const handleSendNotification = async (type) => {
+    setNotifyLoading(true);
+    try {
+      const response = await api.post(`/admin/sales-orders/${params.id}/notify`, { type });
+      const msg = response.data?.message || 'Notification sent';
+      toast.success(msg);
+      setNotifyModal(false);
+    } catch (error) {
+      console.error('Error sending notification:', error);
+      toast.error(error.response?.data?.message || 'Failed to send notification');
+    } finally {
+      setNotifyLoading(false);
+    }
   };
 
   const getCurrentStep = () => {
+    if (!order) return -1;
     if (order.status === 'cancelled') return -1;
     return statusSteps.indexOf(order.status);
+  };
+
+  const getPaidAmount = () => {
+    if (!order) return 0;
+    if (order.paid_amount != null) return parseFloat(order.paid_amount) || 0;
+    if (!order.payments?.length) return 0;
+    return order.payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+  };
+
+  const getPaymentStatus = () => {
+    if (!order) return 'unpaid';
+    const paid = getPaidAmount();
+    const total = parseFloat(order.total_amount) || 0;
+    if (paid >= total && total > 0) return 'paid';
+    if (paid > 0) return 'partial';
+    return 'unpaid';
   };
 
   const itemColumns = [
@@ -190,50 +194,54 @@ export default function OrderDetailPage() {
       dataIndex: 'quantity',
       key: 'quantity',
       align: 'center',
+      render: (qty) => parseFloat(qty) || 0,
     },
     {
       title: 'Unit Price',
       dataIndex: 'unit_price',
       key: 'unit_price',
       align: 'right',
-      render: (price) => `₹${price.toLocaleString()}`,
+      render: (price) => `₹${(parseFloat(price) || 0).toLocaleString()}`,
     },
     {
       title: 'Tax',
-      dataIndex: 'tax_rate',
-      key: 'tax_rate',
+      dataIndex: 'tax_percent',
+      key: 'tax_percent',
       align: 'center',
-      render: (rate) => `${rate}%`,
+      render: (rate) => `${parseFloat(rate) || 0}%`,
     },
     {
       title: 'Discount',
-      dataIndex: 'discount',
-      key: 'discount',
+      dataIndex: 'discount_percent',
+      key: 'discount_percent',
       align: 'right',
-      render: (discount) => discount > 0 ? `-₹${discount.toLocaleString()}` : '-',
+      render: (disc) => {
+        const d = parseFloat(disc) || 0;
+        return d > 0 ? `${d}%` : '-';
+      },
     },
     {
       title: 'Total',
-      dataIndex: 'total',
-      key: 'total',
+      dataIndex: 'total_line',
+      key: 'total_line',
       align: 'right',
-      render: (total) => <span className="font-medium">₹{total.toLocaleString()}</span>,
+      render: (total) => <span className="font-medium">₹{(parseFloat(total) || 0).toLocaleString()}</span>,
     },
   ];
 
   const paymentColumns = [
     {
       title: 'Date',
-      dataIndex: 'date',
-      key: 'date',
-      render: (date) => dayjs(date).format('DD MMM YYYY, hh:mm A'),
+      dataIndex: 'payment_date',
+      key: 'payment_date',
+      render: (date) => dayjs(date).format('DD MMM YYYY'),
     },
     {
       title: 'Method',
-      dataIndex: 'method',
-      key: 'method',
+      dataIndex: 'payment_method',
+      key: 'payment_method',
       render: (method) => (
-        <Tag>{method.replace('_', ' ').toUpperCase()}</Tag>
+        <Tag>{(method || '').replace('_', ' ').toUpperCase()}</Tag>
       ),
     },
     {
@@ -247,7 +255,7 @@ export default function OrderDetailPage() {
       dataIndex: 'amount',
       key: 'amount',
       align: 'right',
-      render: (amount) => <span className="font-medium text-green-600">₹{amount.toLocaleString()}</span>,
+      render: (amount) => <span className="font-medium text-green-600">₹{(parseFloat(amount) || 0).toLocaleString()}</span>,
     },
   ];
 
@@ -267,7 +275,10 @@ export default function OrderDetailPage() {
     );
   }
 
-  const balanceAmount = order.total_amount - order.paid_amount;
+  const paidAmount = getPaidAmount();
+  const paymentStatus = getPaymentStatus();
+  const totalAmount = parseFloat(order.total_amount) || 0;
+  const balanceAmount = totalAmount - paidAmount;
 
   return (
     <div>
@@ -281,7 +292,7 @@ export default function OrderDetailPage() {
           <div>
             <h1 className="page-title flex items-center gap-2">
               {order.order_number}
-              <Tag color={statusColors[order.status]}>{order.status.toUpperCase()}</Tag>
+              <Tag color={statusColors[order.status]}>{(order.status || '').toUpperCase()}</Tag>
             </h1>
             <p className="page-subtitle">
               Created on {dayjs(order.created_at).format('DD MMM YYYY, hh:mm A')}
@@ -290,6 +301,14 @@ export default function OrderDetailPage() {
         </div>
         <Space>
           <Button icon={<PrinterOutlined />}>Print</Button>
+          {order.customer_email && (
+            <Button
+              icon={<BellOutlined />}
+              onClick={() => setNotifyModal(true)}
+            >
+              Send Notification
+            </Button>
+          )}
           <Button
             type="primary"
             icon={<EditOutlined />}
@@ -321,7 +340,7 @@ export default function OrderDetailPage() {
           {/* Order Items */}
           <Card title="Order Items">
             <Table
-              dataSource={order.items}
+              dataSource={order.items || []}
               columns={itemColumns}
               rowKey="id"
               pagination={false}
@@ -332,7 +351,7 @@ export default function OrderDetailPage() {
                       <span className="text-gray-500">Subtotal</span>
                     </Table.Summary.Cell>
                     <Table.Summary.Cell align="right">
-                      ₹{order.subtotal.toLocaleString()}
+                      ₹{(parseFloat(order.subtotal) || 0).toLocaleString()}
                     </Table.Summary.Cell>
                   </Table.Summary.Row>
                   <Table.Summary.Row>
@@ -340,33 +359,35 @@ export default function OrderDetailPage() {
                       <span className="text-gray-500">Tax (GST)</span>
                     </Table.Summary.Cell>
                     <Table.Summary.Cell align="right">
-                      ₹{order.tax_amount.toLocaleString()}
+                      ₹{(parseFloat(order.tax_amount) || 0).toLocaleString()}
                     </Table.Summary.Cell>
                   </Table.Summary.Row>
-                  {order.discount_amount > 0 && (
+                  {parseFloat(order.discount_amount) > 0 && (
                     <Table.Summary.Row>
                       <Table.Summary.Cell colSpan={5} align="right">
                         <span className="text-gray-500">Discount</span>
                       </Table.Summary.Cell>
                       <Table.Summary.Cell align="right" className="text-red-500">
-                        -₹{order.discount_amount.toLocaleString()}
+                        -₹{(parseFloat(order.discount_amount) || 0).toLocaleString()}
+                      </Table.Summary.Cell>
+                    </Table.Summary.Row>
+                  )}
+                  {parseFloat(order.shipping_amount) > 0 && (
+                    <Table.Summary.Row>
+                      <Table.Summary.Cell colSpan={5} align="right">
+                        <span className="text-gray-500">Shipping</span>
+                      </Table.Summary.Cell>
+                      <Table.Summary.Cell align="right">
+                        ₹{(parseFloat(order.shipping_amount) || 0).toLocaleString()}
                       </Table.Summary.Cell>
                     </Table.Summary.Row>
                   )}
                   <Table.Summary.Row>
                     <Table.Summary.Cell colSpan={5} align="right">
-                      <span className="text-gray-500">Shipping</span>
-                    </Table.Summary.Cell>
-                    <Table.Summary.Cell align="right">
-                      ₹{order.shipping_charge.toLocaleString()}
-                    </Table.Summary.Cell>
-                  </Table.Summary.Row>
-                  <Table.Summary.Row>
-                    <Table.Summary.Cell colSpan={5} align="right">
                       <span className="font-bold text-lg">Total</span>
                     </Table.Summary.Cell>
                     <Table.Summary.Cell align="right">
-                      <span className="font-bold text-lg">₹{order.total_amount.toLocaleString()}</span>
+                      <span className="font-bold text-lg">₹{totalAmount.toLocaleString()}</span>
                     </Table.Summary.Cell>
                   </Table.Summary.Row>
                 </>
@@ -382,14 +403,21 @@ export default function OrderDetailPage() {
                 <Button
                   type="primary"
                   icon={<DollarOutlined />}
-                  onClick={() => setPaymentModal(true)}
+                  onClick={() => {
+                    if (!order.invoices?.length) {
+                      toast.error('Please generate an invoice first');
+                      return;
+                    }
+                    paymentForm.setFieldsValue({ amount: balanceAmount });
+                    setPaymentModal(true);
+                  }}
                 >
                   Record Payment
                 </Button>
               )
             }
           >
-            {order.payments.length > 0 ? (
+            {order.payments?.length > 0 ? (
               <Table
                 dataSource={order.payments}
                 columns={paymentColumns}
@@ -402,7 +430,7 @@ export default function OrderDetailPage() {
                         <span className="font-medium">Total Paid</span>
                       </Table.Summary.Cell>
                       <Table.Summary.Cell align="right">
-                        <span className="font-bold text-green-600">₹{order.paid_amount.toLocaleString()}</span>
+                        <span className="font-bold text-green-600">₹{paidAmount.toLocaleString()}</span>
                       </Table.Summary.Cell>
                     </Table.Summary.Row>
                     {balanceAmount > 0 && (
@@ -422,26 +450,6 @@ export default function OrderDetailPage() {
               <Empty description="No payments recorded" />
             )}
           </Card>
-
-          {/* Order Timeline */}
-          <Card title="Order Timeline">
-            <Timeline
-              items={order.timeline.map((item) => ({
-                color: statusColors[item.status] === 'green' ? 'green' : 'blue',
-                children: (
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <Tag color={statusColors[item.status]}>{item.status.toUpperCase()}</Tag>
-                      <span className="text-gray-500 text-sm">
-                        {dayjs(item.date).format('DD MMM YYYY, hh:mm A')}
-                      </span>
-                    </div>
-                    <div className="mt-1">{item.note}</div>
-                  </div>
-                ),
-              }))}
-            />
-          </Card>
         </div>
 
         {/* Sidebar */}
@@ -453,12 +461,14 @@ export default function OrderDetailPage() {
                 <UserOutlined className="text-gray-400" />
                 <span className="font-medium">{order.customer_name}</span>
               </div>
-              <div className="flex items-center gap-2">
-                <PhoneOutlined className="text-gray-400" />
-                <a href={`tel:${order.customer_phone}`} className="text-blue-600">
-                  {order.customer_phone}
-                </a>
-              </div>
+              {order.customer_phone && (
+                <div className="flex items-center gap-2">
+                  <PhoneOutlined className="text-gray-400" />
+                  <a href={`tel:${order.customer_phone}`} className="text-blue-600">
+                    {order.customer_phone}
+                  </a>
+                </div>
+              )}
               {order.customer_email && (
                 <div className="flex items-center gap-2">
                   <MailOutlined className="text-gray-400" />
@@ -471,30 +481,39 @@ export default function OrderDetailPage() {
           </Card>
 
           {/* Shipping Address */}
-          <Card title="Shipping Address">
-            <div className="flex gap-2">
-              <EnvironmentOutlined className="text-gray-400 mt-1" />
-              <span>{order.shipping_address}</span>
-            </div>
-          </Card>
+          {order.shipping_address && (
+            <Card title="Shipping Address">
+              <div className="flex gap-2">
+                <EnvironmentOutlined className="text-gray-400 mt-1" />
+                <div>
+                  <div>{order.shipping_address}</div>
+                  {(order.shipping_city || order.shipping_state || order.shipping_pincode) && (
+                    <div className="text-gray-500 text-sm mt-1">
+                      {[order.shipping_city, order.shipping_state, order.shipping_pincode].filter(Boolean).join(', ')}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </Card>
+          )}
 
           {/* Payment Summary */}
           <Card title="Payment Summary">
             <div className="space-y-3">
               <div className="flex justify-between">
                 <span className="text-gray-500">Status</span>
-                <Tag color={paymentStatusColors[order.payment_status]}>
-                  {order.payment_status.toUpperCase()}
+                <Tag color={paymentStatusColors[paymentStatus]}>
+                  {paymentStatus.toUpperCase()}
                 </Tag>
               </div>
               <Divider className="my-2" />
               <div className="flex justify-between">
                 <span className="text-gray-500">Total Amount</span>
-                <span className="font-medium">₹{order.total_amount.toLocaleString()}</span>
+                <span className="font-medium">₹{totalAmount.toLocaleString()}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Paid Amount</span>
-                <span className="font-medium text-green-600">₹{order.paid_amount.toLocaleString()}</span>
+                <span className="font-medium text-green-600">₹{paidAmount.toLocaleString()}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Balance</span>
@@ -507,7 +526,7 @@ export default function OrderDetailPage() {
 
           {/* Invoices */}
           <Card title="Invoices">
-            {order.invoices.length > 0 ? (
+            {order.invoices?.length > 0 ? (
               <div className="space-y-2">
                 {order.invoices.map((inv) => (
                   <div key={inv.id} className="p-3 bg-gray-50 rounded-lg">
@@ -515,10 +534,10 @@ export default function OrderDetailPage() {
                       <Link href={`/invoices/${inv.id}`} className="text-blue-600 font-medium">
                         {inv.invoice_number}
                       </Link>
-                      <Tag color={paymentStatusColors[inv.status]}>{inv.status.toUpperCase()}</Tag>
+                      <Tag color={paymentStatusColors[inv.status] || 'default'}>{(inv.status || '').toUpperCase()}</Tag>
                     </div>
                     <div className="text-sm text-gray-500 mt-1">
-                      {dayjs(inv.date).format('DD MMM YYYY')} • ₹{inv.amount.toLocaleString()}
+                      {dayjs(inv.invoice_date || inv.created_at).format('DD MMM YYYY')} • ₹{(parseFloat(inv.total_amount) || 0).toLocaleString()}
                     </div>
                   </div>
                 ))}
@@ -526,9 +545,39 @@ export default function OrderDetailPage() {
             ) : (
               <Empty description="No invoices" />
             )}
-            <Button type="dashed" block className="mt-3" icon={<FileTextOutlined />}>
-              Generate Invoice
+            <Button
+              type="dashed"
+              block
+              className="mt-3"
+              icon={<FileTextOutlined />}
+              onClick={handleGenerateInvoice}
+              loading={invoiceLoading}
+              disabled={order.invoices?.length > 0}
+            >
+              {order.invoices?.length > 0 ? 'Invoice Generated' : 'Generate Invoice'}
             </Button>
+          </Card>
+
+          {/* Order Info */}
+          <Card title="Order Info">
+            <div className="space-y-2 text-sm">
+              {order.source && (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Source</span>
+                  <Tag>{order.source.replace('_', ' ').toUpperCase()}</Tag>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-gray-500">Created</span>
+                <span>{dayjs(order.created_at).format('DD MMM YYYY, hh:mm A')}</span>
+              </div>
+              {order.updated_at && (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Updated</span>
+                  <span>{dayjs(order.updated_at).format('DD MMM YYYY, hh:mm A')}</span>
+                </div>
+              )}
+            </div>
           </Card>
 
           {/* Notes */}
@@ -555,7 +604,6 @@ export default function OrderDetailPage() {
           >
             <Select
               options={[
-                { value: 'pending', label: 'Pending' },
                 { value: 'confirmed', label: 'Confirmed' },
                 { value: 'processing', label: 'Processing' },
                 { value: 'shipped', label: 'Shipped' },
@@ -574,6 +622,62 @@ export default function OrderDetailPage() {
             </Space>
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* Send Notification Modal */}
+      <Modal
+        title="Send Email Notification"
+        open={notifyModal}
+        onCancel={() => setNotifyModal(false)}
+        footer={null}
+      >
+        <div className="mb-4">
+          <p className="text-gray-500 text-sm mb-1">Sending to:</p>
+          <p className="font-medium">{order.customer_email}</p>
+        </div>
+        <div className="space-y-3">
+          <Button
+            block
+            size="large"
+            icon={<SendOutlined />}
+            loading={notifyLoading}
+            onClick={() => handleSendNotification('confirmation')}
+            className="text-left h-auto py-3"
+          >
+            <div>
+              <div className="font-medium">Order Confirmation</div>
+              <div className="text-xs text-gray-500 font-normal">Order details, items, and total amount</div>
+            </div>
+          </Button>
+          <Button
+            block
+            size="large"
+            icon={<SendOutlined />}
+            loading={notifyLoading}
+            onClick={() => handleSendNotification('shipped')}
+            disabled={!['shipped', 'delivered'].includes(order.status)}
+            className="text-left h-auto py-3"
+          >
+            <div>
+              <div className="font-medium">Order Shipped</div>
+              <div className="text-xs text-gray-500 font-normal">Shipment notification with delivery info</div>
+            </div>
+          </Button>
+          <Button
+            block
+            size="large"
+            icon={<SendOutlined />}
+            loading={notifyLoading}
+            onClick={() => handleSendNotification('delivered')}
+            disabled={order.status !== 'delivered'}
+            className="text-left h-auto py-3"
+          >
+            <div>
+              <div className="font-medium">Order Delivered</div>
+              <div className="text-xs text-gray-500 font-normal">Delivery confirmation</div>
+            </div>
+          </Button>
+        </div>
       </Modal>
 
       {/* Record Payment Modal */}
@@ -610,7 +714,7 @@ export default function OrderDetailPage() {
             />
           </Form.Item>
           <Form.Item
-            name="method"
+            name="payment_method"
             label="Payment Method"
             rules={[{ required: true, message: 'Please select payment method' }]}
           >

@@ -3,66 +3,13 @@
 import { useState, useEffect } from 'react';
 import { Card, Row, Col, Table, Tag, Statistic, Progress, Spin, message } from 'antd';
 import {
-  DollarOutlined,
-  ShoppingCartOutlined,
-  InboxOutlined,
   AlertOutlined,
-  RiseOutlined,
   ArrowUpOutlined,
-  ArrowDownOutlined,
 } from '@ant-design/icons';
 import Link from 'next/link';
 import api from '@/lib/api';
 
-// Sample dashboard data
-const sampleData = {
-  sales: {
-    total_orders: 156,
-    total_revenue: 245000,
-    delivered_revenue: 198000,
-    by_status: [
-      { status: 'enquiry', count: 12 },
-      { status: 'confirmed', count: 8 },
-      { status: 'processing', count: 5 },
-      { status: 'shipped', count: 10 },
-      { status: 'delivered', count: 118 },
-      { status: 'cancelled', count: 3 },
-    ]
-  },
-  recent_orders: [
-    { id: 1, order_number: 'ORD-202512-0156', customer_name: 'John Sharma', total_amount: 2450, status: 'confirmed', created_at: '2025-12-05' },
-    { id: 2, order_number: 'ORD-202512-0155', customer_name: 'Priya Patel', total_amount: 5680, status: 'processing', created_at: '2025-12-05' },
-    { id: 3, order_number: 'ORD-202512-0154', customer_name: 'Raj Kumar', total_amount: 1200, status: 'shipped', created_at: '2025-12-04' },
-    { id: 4, order_number: 'ORD-202512-0153', customer_name: 'Anita Singh', total_amount: 3400, status: 'delivered', created_at: '2025-12-04' },
-    { id: 5, order_number: 'ORD-202512-0152', customer_name: 'Vikram Rao', total_amount: 8900, status: 'delivered', created_at: '2025-12-03' },
-  ],
-  stock: {
-    total_stock_value: 1250000,
-    total_units: 5680,
-    low_stock_count: 8,
-    low_stock_items: [
-      { id: 1, sku: 'CUM001-500G', variant_name: '500g', stock_qty: 5, low_stock_threshold: 10, product_name: 'Cumin Seeds' },
-      { id: 2, sku: 'PEP001-250G', variant_name: '250g', stock_qty: 3, low_stock_threshold: 10, product_name: 'Black Pepper' },
-      { id: 3, sku: 'ALM001-500G', variant_name: '500g', stock_qty: 8, low_stock_threshold: 15, product_name: 'California Almonds' },
-    ]
-  },
-  pending_enquiries: 5,
-  pending_pos: 3,
-  outstanding_invoices: {
-    count: 12,
-    total_outstanding: 45600
-  },
-  top_products: [
-    { product_name: 'Cumin Seeds', variant_name: '250g', total_qty: 245, total_revenue: 23275 },
-    { product_name: 'Black Pepper', variant_name: '100g', total_qty: 198, total_revenue: 23760 },
-    { product_name: 'Turmeric Powder', variant_name: '500g', total_qty: 156, total_revenue: 23400 },
-    { product_name: 'Groundnut Oil', variant_name: '1L', total_qty: 134, total_revenue: 33500 },
-    { product_name: 'California Almonds', variant_name: '250g', total_qty: 98, total_revenue: 39200 },
-  ]
-};
-
 const statusColors = {
-  enquiry: 'blue',
   confirmed: 'gold',
   processing: 'orange',
   shipped: 'purple',
@@ -231,19 +178,6 @@ export default function DashboardPage() {
 
           {/* Quick Stats */}
           <Row gutter={[16, 16]} className="mb-6">
-            <Col xs={24} sm={8}>
-              <Card className="bg-blue-50 border-blue-100">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-blue-600 text-sm font-medium">Pending Enquiries</div>
-                    <div className="text-2xl font-bold text-blue-700">{data.pending_enquiries}</div>
-                  </div>
-                  <Link href="/enquiries" className="text-blue-600 hover:text-blue-800 text-sm">
-                    View All →
-                  </Link>
-                </div>
-              </Card>
-            </Col>
             <Col xs={24} sm={8}>
               <Card className="bg-orange-50 border-orange-100">
                 <div className="flex items-center justify-between">

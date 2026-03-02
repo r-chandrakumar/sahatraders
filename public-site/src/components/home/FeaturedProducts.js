@@ -2,17 +2,19 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
+import SafeImage from '@/components/common/SafeImage';
 import { Card, Button, Tag, Spin } from 'antd';
-import { ShoppingOutlined, RightOutlined } from '@ant-design/icons';
+import { ShoppingCartOutlined, RightOutlined } from '@ant-design/icons';
 import { getProducts } from '@/lib/api';
 import { getImageUrl, getPriceRange, isInStock } from '@/lib/utils';
+import { useCart } from '@/context/CartContext';
 
-const PLACEHOLDER_IMAGE = 'https://placehold.co/300x300/f3f4f6/9ca3af?text=Product';
+const PLACEHOLDER_IMAGE = '/images/placeholder-product.svg';
 
 const FeaturedProducts = () => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { addToCart } = useCart();
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -70,7 +72,7 @@ const FeaturedProducts = () => {
           {products.map((product) => {
             const priceRange = getPriceRange(product.variants);
             const inStock = isInStock(product.variants);
-            const productImage = product.images?.[0]?.image_url || product.image;
+            const productImage = product.images?.[0]?.url || product.image;
 
             return (
               <Link key={product.id} href={`/products/${product.slug}`}>
@@ -78,14 +80,12 @@ const FeaturedProducts = () => {
                   className="product-card h-full cursor-pointer overflow-hidden"
                   cover={
                     <div className="bg-gray-100 h-48 flex items-center justify-center relative">
-                      <Image
+                      <SafeImage
                         src={getImageUrl(productImage, PLACEHOLDER_IMAGE)}
+                        fallback={PLACEHOLDER_IMAGE}
                         alt={product.name}
                         fill
                         className="object-cover"
-                        onError={(e) => {
-                          e.target.src = PLACEHOLDER_IMAGE;
-                        }}
                       />
                       {!inStock && (
                         <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
@@ -111,8 +111,19 @@ const FeaturedProducts = () => {
                         </span>
                       )}
                     </div>
-                    {inStock && (
-                      <span className="badge-in-stock">In Stock</span>
+                    {inStock && product.variants?.[0] && (
+                      <Button
+                        type="primary"
+                        size="small"
+                        icon={<ShoppingCartOutlined />}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          addToCart(product.variants[0].id, 1);
+                        }}
+                      >
+                        Add
+                      </Button>
                     )}
                   </div>
                 </Card>
@@ -123,9 +134,9 @@ const FeaturedProducts = () => {
 
         {/* CTA */}
         <div className="text-center mt-12">
-          <Link href="/enquiry">
-            <Button type="primary" size="large" icon={<ShoppingOutlined />} className="h-12 px-8">
-              Place Bulk Order Enquiry
+          <Link href="/products">
+            <Button type="primary" size="large" icon={<ShoppingCartOutlined />} className="h-12 px-8">
+              View All Products
             </Button>
           </Link>
         </div>

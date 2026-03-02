@@ -1,28 +1,30 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import Image from 'next/image';
-import { Card, Button, Tag, Select, InputNumber, Breadcrumb, Tabs, Modal, Form, Input, Spin, Empty } from 'antd';
-import { HomeOutlined, ShoppingOutlined, PhoneOutlined, CheckCircleOutlined } from '@ant-design/icons';
+import SafeImage from '@/components/common/SafeImage';
+import { Card, Button, Tag, Select, InputNumber, Breadcrumb, Tabs, Spin, Empty } from 'antd';
+import { HomeOutlined, ShoppingCartOutlined, ShoppingOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import toast from 'react-hot-toast';
-import { getProductBySlug, getProducts, submitEnquiry } from '@/lib/api';
+import { getProductBySlug, getProducts } from '@/lib/api';
 import { getImageUrl, getPriceRange, isInStock } from '@/lib/utils';
+import { useCart } from '@/context/CartContext';
+import { useAuth } from '@/context/AuthContext';
 
-const { TextArea } = Input;
-
-const PLACEHOLDER_IMAGE = 'https://placehold.co/400x400/f3f4f6/9ca3af?text=Product';
+const PLACEHOLDER_IMAGE = '/images/placeholder-product.svg';
 
 export default function ProductDetailPage({ params }) {
   const { slug } = params;
+  const router = useRouter();
+  const { addToCart } = useCart();
+  const { isAuthenticated } = useAuth();
   const [product, setProduct] = useState(null);
   const [relatedProducts, setRelatedProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedVariant, setSelectedVariant] = useState(null);
   const [quantity, setQuantity] = useState(1);
-  const [enquiryModalOpen, setEnquiryModalOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [form] = Form.useForm();
+  const [addingToCart, setAddingToCart] = useState(false);
 
   useEffect(() => {
     const fetchProduct = async () => {
@@ -56,24 +58,34 @@ export default function ProductDetailPage({ params }) {
     fetchProduct();
   }, [slug]);
 
-  const handleEnquirySubmit = async (values) => {
-    try {
-      setSubmitting(true);
-      await submitEnquiry({
-        ...values,
-        product_id: product.id,
-        product_name: product.name,
-        variant_name: selectedVariant?.variant_name || selectedVariant?.name || '',
-        quantity: quantity
-      });
-      toast.success('Enquiry submitted successfully! We will contact you soon.');
-      setEnquiryModalOpen(false);
-      form.resetFields();
-    } catch (error) {
-      console.error('Failed to submit enquiry:', error);
-      toast.error('Failed to submit enquiry. Please try again.');
-    } finally {
-      setSubmitting(false);
+  const handleAddToCart = async () => {
+    if (!isAuthenticated) {
+      router.push(`/login?redirect=/products/${slug}`);
+      return;
+    }
+    if (!selectedVariant) {
+      toast.error('Please select a variant');
+      return;
+    }
+    setAddingToCart(true);
+    await addToCart(selectedVariant.id, quantity);
+    setAddingToCart(false);
+  };
+
+  const handleBuyNow = async () => {
+    if (!isAuthenticated) {
+      router.push(`/login?redirect=/products/${slug}`);
+      return;
+    }
+    if (!selectedVariant) {
+      toast.error('Please select a variant');
+      return;
+    }
+    setAddingToCart(true);
+    const result = await addToCart(selectedVariant.id, quantity);
+    setAddingToCart(false);
+    if (result.success) {
+      router.push('/checkout');
     }
   };
 
@@ -93,7 +105,7 @@ export default function ProductDetailPage({ params }) {
     );
   }
 
-  const productImage = product.images?.[0]?.image_url || product.image;
+  const productImage = product.images?.[0]?.url || product.image;
   const inStock = selectedVariant ? (selectedVariant.stock_qty > 0 || selectedVariant.is_active !== false) : isInStock(product.variants);
   const discount = selectedVariant?.mrp && selectedVariant?.sell_price
     ? Math.round(((selectedVariant.mrp - selectedVariant.sell_price) / selectedVariant.mrp) * 100)
@@ -121,14 +133,12 @@ export default function ProductDetailPage({ params }) {
           <div className="grid lg:grid-cols-2 gap-8 p-6 lg:p-8">
             {/* Product Image */}
             <div className="bg-gray-100 rounded-xl h-[400px] flex items-center justify-center relative">
-              <Image
+              <SafeImage
                 src={getImageUrl(productImage, PLACEHOLDER_IMAGE)}
+                fallback={PLACEHOLDER_IMAGE}
                 alt={product.name}
                 fill
                 className="object-contain p-4"
-                onError={(e) => {
-                  e.target.src = PLACEHOLDER_IMAGE;
-                }}
               />
             </div>
 
@@ -207,18 +217,23 @@ export default function ProductDetailPage({ params }) {
                 <Button
                   type="primary"
                   size="large"
+                  icon={<ShoppingCartOutlined />}
+                  onClick={handleAddToCart}
+                  disabled={!inStock}
+                  loading={addingToCart}
+                  className="h-12 px-8"
+                >
+                  Add to Cart
+                </Button>
+                <Button
+                  size="large"
                   icon={<ShoppingOutlined />}
-                  onClick={() => setEnquiryModalOpen(true)}
+                  onClick={handleBuyNow}
                   disabled={!inStock}
                   className="h-12 px-8"
                 >
-                  Enquire Now
+                  Buy Now
                 </Button>
-                <a href="tel:+919876543210">
-                  <Button size="large" icon={<PhoneOutlined />} className="h-12 px-8">
-                    Call to Order
-                  </Button>
-                </a>
               </div>
 
               {/* Short description */}
@@ -293,7 +308,7 @@ export default function ProductDetailPage({ params }) {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
               {relatedProducts.map((item) => {
                 const itemPriceRange = getPriceRange(item.variants);
-                const itemImage = item.images?.[0]?.image_url || item.image;
+                const itemImage = item.images?.[0]?.url || item.image;
 
                 return (
                   <Link key={item.id} href={`/products/${item.slug}`}>
@@ -301,14 +316,12 @@ export default function ProductDetailPage({ params }) {
                       className="product-card cursor-pointer"
                       cover={
                         <div className="bg-gray-100 h-36 flex items-center justify-center relative">
-                          <Image
+                          <SafeImage
                             src={getImageUrl(itemImage, PLACEHOLDER_IMAGE)}
+                            fallback={PLACEHOLDER_IMAGE}
                             alt={item.name}
                             fill
                             className="object-cover"
-                            onError={(e) => {
-                              e.target.src = PLACEHOLDER_IMAGE;
-                            }}
                           />
                         </div>
                       }
@@ -326,57 +339,6 @@ export default function ProductDetailPage({ params }) {
         )}
       </div>
 
-      {/* Enquiry Modal */}
-      <Modal
-        title="Product Enquiry"
-        open={enquiryModalOpen}
-        onCancel={() => setEnquiryModalOpen(false)}
-        footer={null}
-        width={500}
-      >
-        <div className="mb-4 p-4 bg-gray-50 rounded-lg">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 relative">
-              <Image
-                src={getImageUrl(productImage, PLACEHOLDER_IMAGE)}
-                alt={product.name}
-                fill
-                className="object-cover rounded"
-                onError={(e) => {
-                  e.target.src = PLACEHOLDER_IMAGE;
-                }}
-              />
-            </div>
-            <div>
-              <h4 className="font-semibold">{product.name}</h4>
-              <p className="text-gray-500">{selectedVariant?.variant_name || selectedVariant?.name || 'Standard'} × {quantity}</p>
-              <p className="text-primary-600 font-bold">
-                ₹{(selectedVariant?.sell_price || selectedVariant?.price || 0) * quantity}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <Form form={form} layout="vertical" onFinish={handleEnquirySubmit}>
-          <Form.Item name="name" label="Your Name" rules={[{ required: true, message: 'Please enter your name' }]}>
-            <Input placeholder="Enter your name" />
-          </Form.Item>
-          <Form.Item name="phone" label="Phone Number" rules={[{ required: true, message: 'Please enter your phone number' }]}>
-            <Input placeholder="Enter your phone number" />
-          </Form.Item>
-          <Form.Item name="email" label="Email (Optional)">
-            <Input placeholder="Enter your email" />
-          </Form.Item>
-          <Form.Item name="message" label="Message (Optional)">
-            <TextArea rows={3} placeholder="Any specific requirements?" />
-          </Form.Item>
-          <Form.Item>
-            <Button type="primary" htmlType="submit" block size="large" loading={submitting}>
-              Submit Enquiry
-            </Button>
-          </Form.Item>
-        </Form>
-      </Modal>
     </div>
   );
 }

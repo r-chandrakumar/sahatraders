@@ -42,7 +42,7 @@ const getOrCreateCart = async (req, res, next) => {
       );
       if (customerCarts.length > 0) {
         req.cart = customerCarts[0];
-        res.cookie('cart_id', req.cart.id, { maxAge: 30 * 24 * 60 * 60 * 1000 });
+        res.cookie('cart_id', req.cart.id, { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: true, sameSite: 'none', secure: true });
         return next();
       }
     }
@@ -54,7 +54,7 @@ const getOrCreateCart = async (req, res, next) => {
     );
 
     req.cart = { id: result.insertId, customer_id: customerId };
-    res.cookie('cart_id', result.insertId, { maxAge: 30 * 24 * 60 * 60 * 1000 });
+    res.cookie('cart_id', result.insertId, { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: true, sameSite: 'none', secure: true });
 
     next();
   } catch (error) {
@@ -69,7 +69,7 @@ router.get('/', getOrCreateCart, async (req, res) => {
     const [items] = await db.query(`
       SELECT ci.*, pv.sku, pv.variant_name, pv.sell_price, pv.stock_qty as stock_quantity,
              p.id as product_id, p.name as product_name, p.slug,
-             (SELECT image_url FROM product_images WHERE product_id = p.id AND is_primary = 1 LIMIT 1) as image
+             (SELECT url FROM product_images WHERE product_id = p.id ORDER BY sort_order ASC LIMIT 1) as image
       FROM cart_items ci
       LEFT JOIN product_variants pv ON ci.variant_id = pv.id
       LEFT JOIN products p ON pv.product_id = p.id
@@ -146,10 +146,10 @@ router.post('/add',
       }
 
       // Check stock
-      if (newQuantity > variant.stock_quantity) {
+      if (newQuantity > variant.stock_qty) {
         return res.status(400).json({
-          message: `Only ${variant.stock_quantity} items available`,
-          available_stock: variant.stock_quantity
+          message: `Only ${variant.stock_qty} items available`,
+          available_stock: variant.stock_qty
         });
       }
 

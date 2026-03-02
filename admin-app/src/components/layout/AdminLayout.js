@@ -69,7 +69,6 @@ const menuItems = [
     label: 'Sales',
     children: [
       { key: '/orders', label: 'Sales Orders' },
-      { key: '/enquiries', label: 'Enquiries' },
     ],
   },
   {

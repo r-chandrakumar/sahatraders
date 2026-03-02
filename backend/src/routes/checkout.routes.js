@@ -4,6 +4,7 @@ const db = require('../config/database');
 const { body, validationResult } = require('express-validator');
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
+const { sendEmail } = require('../services/email.service');
 
 // Initialize Razorpay
 let razorpay;
@@ -71,7 +72,7 @@ router.post('/create-order',
 
       // Get cart items with stock check
       const [items] = await connection.query(`
-        SELECT ci.*, pv.selling_price, pv.stock_quantity, pv.tax_rate, pv.cost_price,
+        SELECT ci.*, pv.sell_price, pv.stock_qty, pv.tax_percent, pv.buy_price,
                p.name as product_name, pv.variant_name
         FROM cart_items ci
         LEFT JOIN product_variants pv ON ci.variant_id = pv.id
@@ -86,11 +87,11 @@ router.post('/create-order',
 
       // Check stock for all items
       for (const item of items) {
-        if (item.quantity > item.stock_quantity) {
+        if (item.quantity > item.stock_qty) {
           await connection.rollback();
           return res.status(400).json({
             message: `Insufficient stock for ${item.product_name} - ${item.variant_name}`,
-            available: item.stock_quantity
+            available: item.stock_qty
           });
         }
       }
@@ -100,9 +101,9 @@ router.post('/create-order',
       let taxAmount = 0;
 
       for (const item of items) {
-        const itemSubtotal = item.quantity * item.selling_price;
+        const itemSubtotal = item.quantity * item.sell_price;
         subtotal += itemSubtotal;
-        taxAmount += itemSubtotal * ((item.tax_rate || 0) / 100);
+        taxAmount += itemSubtotal * ((item.tax_percent || 0) / 100);
       }
 
       // Get cart coupon
@@ -141,42 +142,49 @@ router.post('/create-order',
       const orderNumber = await generateOrderNumber(connection);
 
       // Create order
+      const paymentStatus = payment_method === 'cod' ? 'pending' : 'pending';
       const [orderResult] = await connection.query(`
         INSERT INTO sales_orders (
           order_number, customer_id, customer_name, customer_email, customer_phone,
-          shipping_address, billing_address, subtotal, tax_amount, discount_amount,
-          shipping_charge, total_amount, payment_method, status, payment_status, notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'unpaid', ?)
+          shipping_address, subtotal, tax_amount, discount_amount,
+          shipping_amount, total_amount, status, payment_method, payment_status, source, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', ?, ?, 'website', ?)
       `, [
         orderNumber, customerId, customer_name, customer_email, customer_phone,
-        shipping_address, billing_address || shipping_address, subtotal, taxAmount,
-        discountAmount, shippingCharge, totalAmount, payment_method, notes
+        shipping_address, subtotal, taxAmount,
+        discountAmount, shippingCharge, totalAmount, payment_method, paymentStatus, notes
       ]);
 
       const orderId = orderResult.insertId;
 
+      // Log initial status
+      await connection.query(
+        'INSERT INTO order_status_history (sales_order_id, status) VALUES (?, ?)',
+        [orderId, 'confirmed']
+      );
+
       // Insert order items and update stock
       for (const item of items) {
+        const lineTotal = item.quantity * item.sell_price;
         await connection.query(`
           INSERT INTO sales_order_items (
-            sales_order_id, variant_id, quantity, unit_price, cost_price, tax_rate, tax_amount, total
+            sales_order_id, variant_id, product_name, variant_name, quantity, unit_price, tax_percent, total_line
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `, [
-          orderId, item.variant_id, item.quantity, item.selling_price, item.cost_price,
-          item.tax_rate || 0, (item.quantity * item.selling_price * (item.tax_rate || 0) / 100),
-          item.quantity * item.selling_price
+          orderId, item.variant_id, item.product_name, item.variant_name,
+          item.quantity, item.sell_price, item.tax_percent || 0, lineTotal
         ]);
 
         // Reserve stock (deduct from available)
         await connection.query(`
-          UPDATE product_variants SET stock_quantity = stock_quantity - ? WHERE id = ?
+          UPDATE product_variants SET stock_qty = stock_qty - ? WHERE id = ?
         `, [item.quantity, item.variant_id]);
 
         // Record stock movement
         await connection.query(`
-          INSERT INTO stock_movements (variant_id, movement_type, quantity, reference_type, reference_id, notes)
-          VALUES (?, 'sale', ?, 'sales_order', ?, 'Stock reserved for order ${orderNumber}')
-        `, [item.variant_id, -item.quantity, orderId]);
+          INSERT INTO stock_movements (variant_id, change_qty, reason, reference_type, reference_id, notes)
+          VALUES (?, ?, 'sale', 'sales_order', ?, ?)
+        `, [item.variant_id, -item.quantity, orderId, `Stock reserved for order ${orderNumber}`]);
       }
 
       // Update coupon usage
@@ -192,6 +200,29 @@ router.post('/create-order',
       await connection.query('UPDATE carts SET coupon_id = NULL, coupon_discount = 0 WHERE id = ?', [cartId]);
 
       await connection.commit();
+
+      // Send order confirmation email (fire-and-forget)
+      if (customer_email) {
+        const emailItems = items.map(item => ({
+          product_name: item.product_name,
+          variant_name: item.variant_name,
+          quantity: item.quantity,
+          unit_price: item.sell_price,
+        }));
+
+        sendEmail(customer_email, 'orderConfirmation', {
+          order_number: orderNumber,
+          customer_name,
+          created_at: new Date(),
+          items: emailItems,
+          subtotal,
+          tax_amount: taxAmount,
+          discount_amount: discountAmount,
+          shipping_amount: shippingCharge,
+          total_amount: totalAmount,
+          shipping_address,
+        }).catch(err => console.error('Order confirmation email error:', err));
+      }
 
       // If online payment, create Razorpay order
       if (payment_method === 'online') {
@@ -342,7 +373,7 @@ router.get('/confirmation/:orderNumber', async (req, res) => {
     // Get items
     const [items] = await db.query(`
       SELECT soi.*, p.name as product_name, pv.variant_name,
-             (SELECT image_url FROM product_images WHERE product_id = p.id AND is_primary = 1 LIMIT 1) as image
+             (SELECT url FROM product_images WHERE product_id = p.id ORDER BY sort_order ASC LIMIT 1) as image
       FROM sales_order_items soi
       LEFT JOIN product_variants pv ON soi.variant_id = pv.id
       LEFT JOIN products p ON pv.product_id = p.id

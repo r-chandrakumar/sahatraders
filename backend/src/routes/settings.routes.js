@@ -65,6 +65,134 @@ router.get('/', authenticateToken, authorizeRoles('super_admin', 'admin'), async
   }
 });
 
+// --- Tax rate routes (MUST be before /:key wildcard) ---
+
+// Get tax rates
+router.get('/tax/rates', authenticateToken, async (req, res) => {
+  try {
+    const [rates] = await db.query('SELECT * FROM tax_rates WHERE is_active = 1 ORDER BY rate');
+    res.json(rates);
+  } catch (error) {
+    console.error('Get tax rates error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Create tax rate
+router.post('/tax/rates',
+  authenticateToken,
+  authorizeRoles('super_admin', 'admin'),
+  [
+    body('name').notEmpty().withMessage('Name is required'),
+    body('rate').isNumeric().withMessage('Rate must be a number'),
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    try {
+      const { name, rate, type = 'inclusive', is_default = false } = req.body;
+
+      // If setting as default, unset others
+      if (is_default) {
+        await db.query('UPDATE tax_rates SET is_default = 0');
+      }
+
+      const [result] = await db.query(`
+        INSERT INTO tax_rates (name, rate, type, is_default, is_active)
+        VALUES (?, ?, ?, ?, 1)
+      `, [name, rate, type, is_default ? 1 : 0]);
+
+      res.status(201).json({
+        message: 'Tax rate created',
+        id: result.insertId
+      });
+    } catch (error) {
+      console.error('Create tax rate error:', error);
+      res.status(500).json({ message: 'Server error' });
+    }
+  }
+);
+
+// Update tax rate
+router.put('/tax/rates/:id',
+  authenticateToken,
+  authorizeRoles('super_admin', 'admin'),
+  async (req, res) => {
+    try {
+      const { name, rate, type, is_default, is_active } = req.body;
+
+      if (is_default) {
+        await db.query('UPDATE tax_rates SET is_default = 0');
+      }
+
+      await db.query(`
+        UPDATE tax_rates
+        SET name = COALESCE(?, name),
+            rate = COALESCE(?, rate),
+            type = COALESCE(?, type),
+            is_default = COALESCE(?, is_default),
+            is_active = COALESCE(?, is_active)
+        WHERE id = ?
+      `, [name, rate, type, is_default, is_active, req.params.id]);
+
+      res.json({ message: 'Tax rate updated' });
+    } catch (error) {
+      console.error('Update tax rate error:', error);
+      res.status(500).json({ message: 'Server error' });
+    }
+  }
+);
+
+// Delete tax rate
+router.delete('/tax/rates/:id',
+  authenticateToken,
+  authorizeRoles('super_admin', 'admin'),
+  async (req, res) => {
+    try {
+      await db.query('DELETE FROM tax_rates WHERE id = ?', [req.params.id]);
+      res.json({ message: 'Tax rate deleted' });
+    } catch (error) {
+      console.error('Delete tax rate error:', error);
+      res.status(500).json({ message: 'Server error' });
+    }
+  }
+);
+
+// --- Payment method routes (MUST be before /:key wildcard) ---
+
+// Get payment methods
+router.get('/payment-methods', async (req, res) => {
+  try {
+    const [methods] = await db.query('SELECT * FROM payment_methods ORDER BY sort_order');
+    res.json(methods);
+  } catch (error) {
+    console.error('Get payment methods error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Toggle payment method
+router.put('/payment-methods/:id/toggle',
+  authenticateToken,
+  authorizeRoles('super_admin', 'admin'),
+  async (req, res) => {
+    try {
+      await db.query(`
+        UPDATE payment_methods SET is_active = NOT is_active WHERE id = ?
+      `, [req.params.id]);
+      res.json({ message: 'Payment method toggled' });
+    } catch (error) {
+      console.error('Toggle payment method error:', error);
+      res.status(500).json({ message: 'Server error' });
+    }
+  }
+);
+
+// --- Wildcard routes (MUST be after specific routes) ---
+
 // Get single setting
 router.get('/:key', authenticateToken, async (req, res) => {
   try {
@@ -208,128 +336,6 @@ router.delete('/:key',
       res.json({ message: 'Setting deleted' });
     } catch (error) {
       console.error('Delete setting error:', error);
-      res.status(500).json({ message: 'Server error' });
-    }
-  }
-);
-
-// Get tax rates
-router.get('/tax/rates', authenticateToken, async (req, res) => {
-  try {
-    const [rates] = await db.query('SELECT * FROM tax_rates WHERE is_active = 1 ORDER BY rate');
-    res.json(rates);
-  } catch (error) {
-    console.error('Get tax rates error:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-// Create tax rate
-router.post('/tax/rates',
-  authenticateToken,
-  authorizeRoles('super_admin', 'admin'),
-  [
-    body('name').notEmpty().withMessage('Name is required'),
-    body('rate').isNumeric().withMessage('Rate must be a number'),
-  ],
-  async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    try {
-      const { name, rate, type = 'inclusive', is_default = false } = req.body;
-
-      // If setting as default, unset others
-      if (is_default) {
-        await db.query('UPDATE tax_rates SET is_default = 0');
-      }
-
-      const [result] = await db.query(`
-        INSERT INTO tax_rates (name, rate, type, is_default, is_active)
-        VALUES (?, ?, ?, ?, 1)
-      `, [name, rate, type, is_default ? 1 : 0]);
-
-      res.status(201).json({
-        message: 'Tax rate created',
-        id: result.insertId
-      });
-    } catch (error) {
-      console.error('Create tax rate error:', error);
-      res.status(500).json({ message: 'Server error' });
-    }
-  }
-);
-
-// Update tax rate
-router.put('/tax/rates/:id',
-  authenticateToken,
-  authorizeRoles('super_admin', 'admin'),
-  async (req, res) => {
-    try {
-      const { name, rate, type, is_default, is_active } = req.body;
-
-      if (is_default) {
-        await db.query('UPDATE tax_rates SET is_default = 0');
-      }
-
-      await db.query(`
-        UPDATE tax_rates
-        SET name = COALESCE(?, name),
-            rate = COALESCE(?, rate),
-            type = COALESCE(?, type),
-            is_default = COALESCE(?, is_default),
-            is_active = COALESCE(?, is_active)
-        WHERE id = ?
-      `, [name, rate, type, is_default, is_active, req.params.id]);
-
-      res.json({ message: 'Tax rate updated' });
-    } catch (error) {
-      console.error('Update tax rate error:', error);
-      res.status(500).json({ message: 'Server error' });
-    }
-  }
-);
-
-// Delete tax rate
-router.delete('/tax/rates/:id',
-  authenticateToken,
-  authorizeRoles('super_admin', 'admin'),
-  async (req, res) => {
-    try {
-      await db.query('DELETE FROM tax_rates WHERE id = ?', [req.params.id]);
-      res.json({ message: 'Tax rate deleted' });
-    } catch (error) {
-      console.error('Delete tax rate error:', error);
-      res.status(500).json({ message: 'Server error' });
-    }
-  }
-);
-
-// Get payment methods
-router.get('/payment-methods', async (req, res) => {
-  try {
-    const [methods] = await db.query('SELECT * FROM payment_methods WHERE is_active = 1 ORDER BY sort_order');
-    res.json(methods);
-  } catch (error) {
-    console.error('Get payment methods error:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-// Toggle payment method
-router.put('/payment-methods/:id/toggle',
-  authenticateToken,
-  authorizeRoles('super_admin', 'admin'),
-  async (req, res) => {
-    try {
-      await db.query(`
-        UPDATE payment_methods SET is_active = NOT is_active WHERE id = ?
-      `, [req.params.id]);
-      res.json({ message: 'Payment method toggled' });
-    } catch (error) {
-      console.error('Toggle payment method error:', error);
       res.status(500).json({ message: 'Server error' });
     }
   }

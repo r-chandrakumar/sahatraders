@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Card, Input, Button, Steps, Spin, Empty, Divider, Tag } from 'antd';
 import {
@@ -22,14 +22,21 @@ export default function TrackOrderPage() {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
 
-  const handleTrack = async () => {
-    if (!orderNumber.trim()) return;
+  useEffect(() => {
+    if (initialOrder) {
+      handleTrack(initialOrder);
+    }
+  }, [initialOrder]);
+
+  const handleTrack = async (num) => {
+    const trackNumber = num || orderNumber;
+    if (!trackNumber.trim()) return;
 
     setLoading(true);
     setSearched(true);
 
     try {
-      const response = await api.get(`/customer/track/${orderNumber.trim()}`);
+      const response = await api.get(`/customer/track/${trackNumber.trim()}`);
       setOrder(response.data);
     } catch (error) {
       setOrder(null);

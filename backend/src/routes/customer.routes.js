@@ -75,7 +75,8 @@ router.post('/register',
 
       res.cookie('customer_token', token, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: true,
+        sameSite: 'none',
         maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
       });
 
@@ -164,7 +165,7 @@ router.post('/login',
 
 // Customer Logout
 router.post('/logout', (req, res) => {
-  res.clearCookie('customer_token');
+  res.clearCookie('customer_token', { httpOnly: true, secure: true, sameSite: 'none' });
   res.json({ message: 'Logged out successfully' });
 });
 
@@ -251,23 +252,27 @@ router.get('/orders', authenticateCustomer, async (req, res) => {
     const { status, page = 1, limit = 10 } = req.query;
     const offset = (page - 1) * limit;
 
-    let query = `
-      SELECT so.*,
-             (SELECT COUNT(*) FROM sales_order_items WHERE sales_order_id = so.id) as item_count
-      FROM sales_orders so
-      WHERE so.customer_id = ?
-    `;
+    let whereClause = 'WHERE so.customer_id = ?';
     const params = [req.customer.id];
 
     if (status) {
-      query += ' AND so.status = ?';
+      whereClause += ' AND so.status = ?';
       params.push(status);
     }
 
     // Get total count
-    const countQuery = query.replace('SELECT so.*, (SELECT COUNT(*) FROM sales_order_items WHERE sales_order_id = so.id) as item_count', 'SELECT COUNT(*) as total');
-    const [countResult] = await db.query(countQuery, params);
+    const [countResult] = await db.query(
+      `SELECT COUNT(*) as total FROM sales_orders so ${whereClause}`,
+      params
+    );
     const total = countResult[0].total;
+
+    let query = `
+      SELECT so.*,
+             (SELECT COUNT(*) FROM sales_order_items WHERE sales_order_id = so.id) as item_count
+      FROM sales_orders so
+      ${whereClause}
+    `;
 
     query += ' ORDER BY so.created_at DESC LIMIT ? OFFSET ?';
     params.push(parseInt(limit), parseInt(offset));
@@ -307,7 +312,7 @@ router.get('/orders/:id', authenticateCustomer, async (req, res) => {
     // Get order items
     const [items] = await db.query(`
       SELECT soi.*, p.name as product_name, p.slug as product_slug, pv.variant_name, pv.sku,
-             (SELECT image_url FROM product_images WHERE product_id = p.id AND is_primary = 1 LIMIT 1) as image
+             (SELECT url FROM product_images WHERE product_id = p.id ORDER BY sort_order ASC LIMIT 1) as image
       FROM sales_order_items soi
       LEFT JOIN product_variants pv ON soi.variant_id = pv.id
       LEFT JOIN products p ON pv.product_id = p.id
@@ -359,22 +364,33 @@ router.get('/track/:orderNumber', async (req, res) => {
 
     order.items = items;
 
-    // Get order timeline/status history
+    // Get order timeline from status history
+    const statusLabels = {
+      pending: 'Order Placed',
+      confirmed: 'Order Confirmed',
+      processing: 'Processing',
+      shipped: 'Shipped',
+      delivered: 'Delivered',
+      cancelled: 'Order Cancelled',
+    };
+
+    const [history] = await db.query(
+      'SELECT status, created_at FROM order_status_history WHERE sales_order_id = ? ORDER BY created_at ASC',
+      [order.id]
+    );
+
     const timeline = [
       { status: 'pending', label: 'Order Placed', date: order.created_at }
     ];
 
-    if (['confirmed', 'processing', 'shipped', 'delivered'].includes(order.status)) {
-      timeline.push({ status: 'confirmed', label: 'Order Confirmed', date: order.created_at });
-    }
-    if (['processing', 'shipped', 'delivered'].includes(order.status)) {
-      timeline.push({ status: 'processing', label: 'Processing', date: order.created_at });
-    }
-    if (['shipped', 'delivered'].includes(order.status)) {
-      timeline.push({ status: 'shipped', label: 'Shipped', date: order.created_at });
-    }
-    if (order.status === 'delivered') {
-      timeline.push({ status: 'delivered', label: 'Delivered', date: order.created_at });
+    for (const entry of history) {
+      if (entry.status !== 'pending') {
+        timeline.push({
+          status: entry.status,
+          label: statusLabels[entry.status] || entry.status,
+          date: entry.created_at
+        });
+      }
     }
 
     order.timeline = timeline;
@@ -459,9 +475,9 @@ router.get('/wishlist', authenticateCustomer, async (req, res) => {
   try {
     const [items] = await db.query(`
       SELECT w.*, p.name, p.slug, p.description,
-             (SELECT image_url FROM product_images WHERE product_id = p.id AND is_primary = 1 LIMIT 1) as image,
-             (SELECT MIN(selling_price) FROM product_variants WHERE product_id = p.id) as min_price,
-             (SELECT MAX(selling_price) FROM product_variants WHERE product_id = p.id) as max_price
+             (SELECT url FROM product_images WHERE product_id = p.id ORDER BY sort_order ASC LIMIT 1) as image,
+             (SELECT MIN(sell_price) FROM product_variants WHERE product_id = p.id) as min_price,
+             (SELECT MAX(sell_price) FROM product_variants WHERE product_id = p.id) as max_price
       FROM customer_wishlist w
       LEFT JOIN products p ON w.product_id = p.id
       WHERE w.customer_id = ?

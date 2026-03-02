@@ -30,20 +30,34 @@ const auditLogRoutes = require('./routes/auditLog.routes');
 const app = express();
 
 // Security middleware
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+      'img-src': ["'self'", 'data:', 'https:', 'http:'],
+    },
+  },
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
 
 // Parse CORS origins from env (can be comma-separated)
 const allowedOrigins = [
   ...(process.env.PUBLIC_SITE_URL?.split(',') || []),
   ...(process.env.ADMIN_APP_URL?.split(',') || []),
-  'https://sahatrades.in',
-  'https://api.sahatrades.in'
-  
+  'https://sahatraders.in',
+  'https://www.sahatraders.in',
+  'https://admin.sahatraders.in',
+  'https://api.sahatraders.in',
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://localhost:3002'
 ].filter(Boolean);
 
 app.use(cors({
   origin: allowedOrigins,
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // Rate limiting

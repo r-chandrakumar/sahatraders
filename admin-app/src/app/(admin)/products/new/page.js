@@ -15,10 +15,14 @@ export default function NewProductPage() {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
+  const [imageFiles, setImageFiles] = useState([]);
+  const [productType, setProductType] = useState('inhouse');
   const router = useRouter();
 
   useEffect(() => {
     fetchCategories();
+    fetchSuppliers();
   }, []);
 
   const fetchCategories = async () => {
@@ -30,6 +34,15 @@ export default function NewProductPage() {
     }
   };
 
+  const fetchSuppliers = async () => {
+    try {
+      const response = await api.get('/admin/suppliers');
+      setSuppliers(response.data.data || []);
+    } catch (error) {
+      console.error('Failed to fetch suppliers:', error);
+    }
+  };
+
   const handleSubmit = async (values) => {
     setLoading(true);
     try {
@@ -37,13 +50,14 @@ export default function NewProductPage() {
       const { variants, ...productData } = values;
 
       // Create the product first
-      const productResponse = await api.post('/products', {
+      const productResponse = await api.post('/admin/products', {
         sku: productData.sku,
         name: productData.name,
         description: productData.description,
         category_id: productData.category_id,
         brand: productData.brand,
         type: productData.type || 'inhouse',
+        supplier_id: productData.supplier_id || null,
         seo_title: productData.seo_title,
         seo_description: productData.seo_description,
       });
@@ -53,7 +67,7 @@ export default function NewProductPage() {
       // Create each variant
       if (variants && variants.length > 0) {
         for (const variant of variants) {
-          await api.post(`/products/${productId}/variants`, {
+          await api.post(`/admin/products/${productId}/variants`, {
             sku: variant.sku,
             variant_name: variant.variant_name,
             weight: variant.weight,
@@ -64,6 +78,21 @@ export default function NewProductPage() {
             low_stock_threshold: 10,
           });
         }
+      }
+
+      // Upload images
+      for (let i = 0; i < imageFiles.length; i++) {
+        const file = imageFiles[i];
+        const formData = new FormData();
+        formData.append('image', file.originFileObj || file);
+        const uploadRes = await api.post('/admin/upload/image?type=products', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        await api.post(`/admin/products/${productId}/images`, {
+          url: uploadRes.data.data.url,
+          alt_text: productData.name,
+          sort_order: i,
+        });
       }
 
       toast.success('Product created successfully');
@@ -231,27 +260,44 @@ export default function NewProductPage() {
                 <Switch />
               </Form.Item>
               <Form.Item name="type" label="Product Type">
-                <Select>
+                <Select onChange={(val) => setProductType(val)}>
                   <Option value="inhouse">In-house</Option>
                   <Option value="supplier">Supplier</Option>
                   <Option value="both">Both</Option>
                 </Select>
               </Form.Item>
+              {(productType === 'supplier' || productType === 'both') && (
+                <Form.Item
+                  name="supplier_id"
+                  label="Supplier"
+                  rules={[{ required: productType === 'supplier', message: 'Please select a supplier' }]}
+                >
+                  <Select placeholder="Select supplier" allowClear showSearch optionFilterProp="children">
+                    {suppliers.map(s => (
+                      <Option key={s.id} value={s.id}>{s.name}</Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              )}
             </Card>
 
-            <Card title="Product Image">
+            <Card title="Product Images">
               <Upload
                 listType="picture-card"
-                maxCount={1}
+                multiple
+                fileList={imageFiles}
                 beforeUpload={() => false}
+                onChange={({ fileList }) => setImageFiles(fileList)}
               >
-                <div>
-                  <PlusOutlined />
-                  <div className="mt-2">Upload</div>
-                </div>
+                {imageFiles.length >= 5 ? null : (
+                  <div>
+                    <PlusOutlined />
+                    <div className="mt-2">Upload</div>
+                  </div>
+                )}
               </Upload>
               <p className="text-gray-500 text-sm mt-2">
-                Recommended: 800x800px, JPG or PNG
+                Recommended: 800x800px, JPG or PNG. Max 5 images.
               </p>
             </Card>
 

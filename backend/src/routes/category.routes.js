@@ -33,6 +33,18 @@ router.get('/', async (req, res, next) => {
 
     const [categories] = await pool.query(query, params);
 
+    // Fetch images for all categories
+    if (categories.length > 0) {
+      const categoryIds = categories.map(c => c.id);
+      const [images] = await pool.query(
+        'SELECT * FROM category_images WHERE category_id IN (?) ORDER BY sort_order ASC',
+        [categoryIds]
+      );
+      for (const cat of categories) {
+        cat.images = images.filter(img => img.category_id === cat.id);
+      }
+    }
+
     res.json(formatResponse(categories));
   } catch (error) {
     next(error);
@@ -53,6 +65,12 @@ router.get('/slug/:slug', async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Category not found' });
     }
 
+    const [images] = await pool.query(
+      'SELECT * FROM category_images WHERE category_id = ? ORDER BY sort_order ASC',
+      [categories[0].id]
+    );
+    categories[0].images = images;
+
     res.json(formatResponse(categories[0]));
   } catch (error) {
     next(error);
@@ -70,6 +88,12 @@ router.get('/:id', async (req, res, next) => {
     if (!categories.length) {
       return res.status(404).json({ success: false, message: 'Category not found' });
     }
+
+    const [images] = await pool.query(
+      'SELECT * FROM category_images WHERE category_id = ? ORDER BY sort_order ASC',
+      [categories[0].id]
+    );
+    categories[0].images = images;
 
     res.json(formatResponse(categories[0]));
   } catch (error) {
@@ -180,6 +204,52 @@ router.delete('/:id', authenticate, authorize('super_admin', 'admin'), async (re
 
     await pool.query('DELETE FROM categories WHERE id = ?', [id]);
     res.json({ success: true, message: 'Category deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Add image to category (admin)
+router.post('/:id/images', authenticate, authorize('super_admin', 'admin'), async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { url, alt_text, sort_order } = req.body;
+
+    const [result] = await pool.query(
+      'INSERT INTO category_images (category_id, url, alt_text, sort_order) VALUES (?, ?, ?, ?)',
+      [id, url, alt_text || null, sort_order || 0]
+    );
+
+    // Also update the category's image_url to the first image for backward compatibility
+    const [images] = await pool.query(
+      'SELECT url FROM category_images WHERE category_id = ? ORDER BY sort_order ASC LIMIT 1',
+      [id]
+    );
+    if (images.length) {
+      await pool.query('UPDATE categories SET image_url = ? WHERE id = ?', [images[0].url, id]);
+    }
+
+    const [newImage] = await pool.query('SELECT * FROM category_images WHERE id = ?', [result.insertId]);
+    res.status(201).json(formatResponse(newImage[0]));
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Delete category image (admin)
+router.delete('/:categoryId/images/:imageId', authenticate, authorize('super_admin', 'admin'), async (req, res, next) => {
+  try {
+    const { categoryId, imageId } = req.params;
+    await pool.query('DELETE FROM category_images WHERE id = ? AND category_id = ?', [imageId, categoryId]);
+
+    // Update category's image_url to the next first image
+    const [images] = await pool.query(
+      'SELECT url FROM category_images WHERE category_id = ? ORDER BY sort_order ASC LIMIT 1',
+      [categoryId]
+    );
+    await pool.query('UPDATE categories SET image_url = ? WHERE id = ?', [images.length ? images[0].url : null, categoryId]);
+
+    res.json({ success: true, message: 'Image deleted successfully' });
   } catch (error) {
     next(error);
   }

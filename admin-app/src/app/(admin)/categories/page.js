@@ -1,12 +1,20 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Table, Button, Input, Card, Tag, Modal, Form, Switch, Space } from 'antd';
+import { Table, Button, Input, Card, Tag, Modal, Form, Switch, Space, Upload } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined } from '@ant-design/icons';
 import toast from 'react-hot-toast';
-import { getCategories, createCategory, updateCategory, deleteCategory } from '@/lib/api';
+import api from '@/lib/api';
+import { getCategories, createCategory, updateCategory, deleteCategory, uploadImage } from '@/lib/api';
 
 const { TextArea } = Input;
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'https://api.sahatraders.in/api').replace(/\/api$/, '');
+
+const getFullUrl = (url) => {
+  if (!url) return null;
+  if (url.startsWith('http')) return url;
+  return `${API_BASE}${url}`;
+};
 
 export default function CategoriesPage() {
   const [categories, setCategories] = useState([]);
@@ -15,9 +23,9 @@ export default function CategoriesPage() {
   const [editingCategory, setEditingCategory] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [imageFiles, setImageFiles] = useState([]);
   const [form] = Form.useForm();
 
-  // Fetch categories on mount
   useEffect(() => {
     fetchCategories();
   }, []);
@@ -39,22 +47,56 @@ export default function CategoriesPage() {
     try {
       setSubmitting(true);
 
+      let categoryId = editingCategory?.id;
+
+      const payload = {
+        name: values.name,
+        description: values.description,
+        sort_order: values.sort_order || 0,
+        is_active: values.is_active,
+      };
+
       if (editingCategory) {
-        await updateCategory(editingCategory.id, values);
-        toast.success('Category updated successfully');
+        await updateCategory(categoryId, payload);
       } else {
-        await createCategory(values);
-        toast.success('Category created successfully');
+        const res = await createCategory(payload);
+        categoryId = res.data.id;
       }
 
+      // Handle images: upload new ones, delete removed ones
+      // Find existing images that were removed
+      const existingImageIds = (editingCategory?.images || []).map(img => img.id);
+      const keptImageIds = imageFiles
+        .filter(f => f.imageId)
+        .map(f => f.imageId);
+      const removedImageIds = existingImageIds.filter(id => !keptImageIds.includes(id));
+
+      // Delete removed images
+      for (const imgId of removedImageIds) {
+        await api.delete(`/admin/categories/${categoryId}/images/${imgId}`);
+      }
+
+      // Upload new images
+      const newFiles = imageFiles.filter(f => f.originFileObj);
+      for (let i = 0; i < newFiles.length; i++) {
+        const file = newFiles[i];
+        const uploadRes = await uploadImage(file.originFileObj, 'categories');
+        await api.post(`/admin/categories/${categoryId}/images`, {
+          url: uploadRes.data.url,
+          alt_text: values.name,
+          sort_order: keptImageIds.length + i,
+        });
+      }
+
+      toast.success(editingCategory ? 'Category updated successfully' : 'Category created successfully');
       await fetchCategories();
       setModalVisible(false);
       setEditingCategory(null);
+      setImageFiles([]);
       form.resetFields();
     } catch (error) {
       console.error('Error saving category:', error);
-      const errorMessage = error.response?.data?.message || 'Failed to save category';
-      toast.error(errorMessage);
+      toast.error(error.response?.data?.message || 'Failed to save category');
     } finally {
       setSubmitting(false);
     }
@@ -78,8 +120,7 @@ export default function CategoriesPage() {
           await fetchCategories();
         } catch (error) {
           console.error('Error deleting category:', error);
-          const errorMessage = error.response?.data?.message || 'Failed to delete category';
-          toast.error(errorMessage);
+          toast.error(error.response?.data?.message || 'Failed to delete category');
         }
       },
     });
@@ -87,7 +128,19 @@ export default function CategoriesPage() {
 
   const openEditModal = (category) => {
     setEditingCategory(category);
-    form.setFieldsValue(category);
+    form.setFieldsValue({
+      ...category,
+      sort_order: category.sort_order || 0,
+    });
+    // Load existing images into fileList
+    const existingImages = (category.images || []).map((img) => ({
+      uid: `existing_${img.id}`,
+      name: img.alt_text || 'image',
+      status: 'done',
+      url: getFullUrl(img.url),
+      imageId: img.id,
+    }));
+    setImageFiles(existingImages);
     setModalVisible(true);
   };
 
@@ -96,12 +149,38 @@ export default function CategoriesPage() {
       title: 'Name',
       dataIndex: 'name',
       key: 'name',
-      render: (name, record) => (
-        <div>
-          <div className="font-medium">{name}</div>
-          <div className="text-sm text-gray-500">/{record.slug}</div>
-        </div>
-      ),
+      render: (name, record) => {
+        const firstImg = record.images?.[0];
+        const imgUrl = firstImg ? getFullUrl(firstImg.url) : (record.image_url ? getFullUrl(record.image_url) : null);
+        return (
+          <div className="flex items-center gap-3">
+            {imgUrl ? (
+              <img
+                src={imgUrl}
+                alt={name}
+                className="w-10 h-10 rounded object-cover"
+                onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+              />
+            ) : null}
+            <div
+              className="w-10 h-10 rounded bg-gray-100 flex items-center justify-center text-gray-400 text-xs flex-shrink-0"
+              style={{ display: imgUrl ? 'none' : 'flex' }}
+            >
+              No img
+            </div>
+            <div>
+              <div className="font-medium">{name}</div>
+              <div className="text-sm text-gray-500">/{record.slug}</div>
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      title: 'Images',
+      key: 'images',
+      width: 80,
+      render: (_, record) => <Tag>{record.images?.length || 0}</Tag>,
     },
     {
       title: 'Description',
@@ -117,8 +196,8 @@ export default function CategoriesPage() {
     },
     {
       title: 'Order',
-      dataIndex: 'display_order',
-      key: 'display_order',
+      dataIndex: 'sort_order',
+      key: 'sort_order',
     },
     {
       title: 'Status',
@@ -168,6 +247,7 @@ export default function CategoriesPage() {
           icon={<PlusOutlined />}
           onClick={() => {
             setEditingCategory(null);
+            setImageFiles([]);
             form.resetFields();
             setModalVisible(true);
           }}
@@ -204,11 +284,13 @@ export default function CategoriesPage() {
         onCancel={() => {
           setModalVisible(false);
           setEditingCategory(null);
+          setImageFiles([]);
           form.resetFields();
         }}
         footer={null}
+        width={600}
       >
-        <Form form={form} layout="vertical" onFinish={handleSubmit} initialValues={{ is_active: true, display_order: 0 }}>
+        <Form form={form} layout="vertical" onFinish={handleSubmit} initialValues={{ is_active: true, sort_order: 0 }}>
           <Form.Item
             name="name"
             label="Category Name"
@@ -221,7 +303,25 @@ export default function CategoriesPage() {
             <TextArea rows={3} placeholder="Enter description" />
           </Form.Item>
 
-          <Form.Item name="display_order" label="Display Order">
+          <Form.Item label="Category Images">
+            <Upload
+              listType="picture-card"
+              fileList={imageFiles}
+              beforeUpload={() => false}
+              onChange={({ fileList }) => setImageFiles(fileList)}
+              multiple
+            >
+              {imageFiles.length >= 5 ? null : (
+                <div>
+                  <PlusOutlined />
+                  <div className="mt-2">Upload</div>
+                </div>
+              )}
+            </Upload>
+            <p className="text-gray-500 text-xs mt-1">Max 5 images. Recommended: 800x800px, JPG or PNG.</p>
+          </Form.Item>
+
+          <Form.Item name="sort_order" label="Display Order">
             <Input type="number" placeholder="0" />
           </Form.Item>
 

@@ -61,7 +61,7 @@ export default function InventoryPage() {
 
     try {
       // Call API to adjust stock
-      await api.post('/admin/inventory/adjust', {
+      await api.post('/admin/inventory/adjustments', {
         variant_id,
         new_qty,
         reason,

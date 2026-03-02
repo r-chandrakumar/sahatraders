@@ -1,5 +1,5 @@
 // Get image URL with fallback to placeholder
-export const getImageUrl = (imagePath, placeholder = '/images/placeholder-product.png') => {
+export const getImageUrl = (imagePath, placeholder = '/images/placeholder-product.svg') => {
   if (!imagePath) return placeholder;
 
   // If it's already a full URL
@@ -8,9 +8,9 @@ export const getImageUrl = (imagePath, placeholder = '/images/placeholder-produc
   }
 
   // If it's an API uploaded image
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.sahatrades.in';
+  const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'https://api.sahatraders.in/api').replace(/\/api$/, '');
   if (imagePath.startsWith('/uploads/')) {
-    return `${API_URL.replace('/api', '')}${imagePath}`;
+    return `${API_URL}${imagePath}`;
   }
 
   return imagePath || placeholder;

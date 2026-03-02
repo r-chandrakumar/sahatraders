@@ -34,7 +34,7 @@ const Header = () => {
   ];
 
   return (
-    <header className="bg-white shadow-sm">
+    <header className="bg-white shadow-sm sticky top-0 z-50">
       {/* Top bar */}
       <div className="bg-primary-600 text-white py-2">
         <div className="container-custom flex justify-between items-center text-sm">
@@ -155,13 +155,6 @@ const Header = () => {
               </Link>
             )}
 
-            {/* Order Enquiry Button */}
-            <Link href="/enquiry">
-              <Button type="primary" className="hidden sm:block">
-                Order Enquiry
-              </Button>
-            </Link>
-
             {/* Mobile menu toggle */}
             <Button
               type="text"
@@ -258,11 +251,6 @@ const Header = () => {
             </Link>
           )}
 
-          <Link href="/enquiry" onClick={() => setMobileMenuOpen(false)}>
-            <Button type="primary" block className="mt-4">
-              Order Enquiry
-            </Button>
-          </Link>
         </nav>
       </Drawer>
     </header>

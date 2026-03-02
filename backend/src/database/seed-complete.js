@@ -409,7 +409,7 @@ async function seedComplete() {
 
     console.log('\n========================================');
     console.log('Application URLs:');
-    console.log('  Backend API:  https://api.sahatrades.in');
+    console.log('  Backend API:  https://api.sahatraders.in');
     console.log('  Public Site:  http://localhost:3000');
     console.log('  Admin Panel:  http://localhost:3001');
     console.log('========================================\n');

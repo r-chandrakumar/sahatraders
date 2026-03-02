@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { Card, Button, InputNumber, Empty, Spin, Input, Tag, Divider } from 'antd';
 import {
@@ -14,6 +13,8 @@ import {
 } from '@ant-design/icons';
 import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
+import SafeImage from '@/components/common/SafeImage';
+import { getImageUrl } from '@/lib/utils';
 
 export default function CartPage() {
   const {
@@ -107,19 +108,13 @@ export default function CartPage() {
             <Card key={item.id} className="overflow-hidden">
               <div className="flex gap-4">
                 <div className="w-24 h-24 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
-                  {item.image ? (
-                    <Image
-                      src={item.image}
-                      alt={item.product_name}
-                      width={96}
-                      height={96}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-gray-400">
-                      <ShoppingOutlined style={{ fontSize: 32 }} />
-                    </div>
-                  )}
+                  <SafeImage
+                    src={getImageUrl(item.image)}
+                    alt={item.product_name}
+                    width={96}
+                    height={96}
+                    className="w-full h-full object-cover"
+                  />
                 </div>
 
                 <div className="flex-1">
@@ -129,7 +124,7 @@ export default function CartPage() {
                     </h3>
                   </Link>
                   <p className="text-gray-500 text-sm">{item.variant_name}</p>
-                  <p className="text-primary font-semibold mt-1">₹{item.selling_price}</p>
+                  <p className="text-primary font-semibold mt-1">₹{(item.sell_price || 0).toLocaleString()}</p>
 
                   {!item.in_stock && (
                     <Tag color="red" className="mt-1">Out of Stock</Tag>

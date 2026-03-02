@@ -35,7 +35,7 @@ const templates = {
       <body>
         <div class="container">
           <div class="header">
-            <h1>Sahaa Traders</h1>
+            <h1>Saha Traders</h1>
             <p>Order Confirmation</p>
           </div>
           <div class="content">
@@ -60,7 +60,7 @@ const templates = {
                 <p>Subtotal: ₹${order.subtotal.toLocaleString()}</p>
                 <p>Tax: ₹${order.tax_amount.toLocaleString()}</p>
                 ${order.discount_amount > 0 ? `<p>Discount: -₹${order.discount_amount.toLocaleString()}</p>` : ''}
-                <p>Shipping: ₹${order.shipping_charge.toLocaleString()}</p>
+                <p>Shipping: ₹${order.shipping_amount.toLocaleString()}</p>
                 <p class="total">Total: ₹${order.total_amount.toLocaleString()}</p>
               </div>
             </div>
@@ -73,8 +73,8 @@ const templates = {
             <p>We'll send you another email when your order ships.</p>
           </div>
           <div class="footer">
-            <p>Sahaa Traders | Quality Groceries Since 1990</p>
-            <p>If you have any questions, contact us at support@sahaatraders.com</p>
+            <p>Saha Traders | Quality Groceries Since 1990</p>
+            <p>If you have any questions, contact us at support@sahatraders.in</p>
           </div>
         </div>
       </body>
@@ -101,7 +101,7 @@ const templates = {
       <body>
         <div class="container">
           <div class="header">
-            <h1>Sahaa Traders</h1>
+            <h1>Saha Traders</h1>
             <p>Your Order Has Shipped!</p>
           </div>
           <div class="content">
@@ -124,7 +124,7 @@ const templates = {
             <p>Expected delivery within 3-5 business days.</p>
           </div>
           <div class="footer">
-            <p>Sahaa Traders | Quality Groceries Since 1990</p>
+            <p>Saha Traders | Quality Groceries Since 1990</p>
           </div>
         </div>
       </body>
@@ -155,10 +155,10 @@ const templates = {
             <p>Hi ${order.customer_name},</p>
             <p>Your order ${order.order_number} has been delivered.</p>
             <p>We hope you enjoy your purchase!</p>
-            <p>Thank you for shopping with Sahaa Traders.</p>
+            <p>Thank you for shopping with Saha Traders.</p>
           </div>
           <div class="footer">
-            <p>Sahaa Traders | Quality Groceries Since 1990</p>
+            <p>Saha Traders | Quality Groceries Since 1990</p>
           </div>
         </div>
       </body>
@@ -167,7 +167,7 @@ const templates = {
   }),
 
   invoiceGenerated: (invoice, order) => ({
-    subject: `Invoice ${invoice.invoice_number} - Sahaa Traders`,
+    subject: `Invoice ${invoice.invoice_number} - Saha Traders`,
     html: `
       <!DOCTYPE html>
       <html>
@@ -184,7 +184,7 @@ const templates = {
       <body>
         <div class="container">
           <div class="header">
-            <h1>Sahaa Traders</h1>
+            <h1>Saha Traders</h1>
             <p>Invoice</p>
           </div>
           <div class="content">
@@ -202,7 +202,7 @@ const templates = {
             <p>A PDF copy of your invoice is attached to this email.</p>
           </div>
           <div class="footer">
-            <p>Sahaa Traders | Quality Groceries Since 1990</p>
+            <p>Saha Traders | Quality Groceries Since 1990</p>
           </div>
         </div>
       </body>
@@ -246,7 +246,7 @@ const templates = {
             ${invoice.balance_due > 0 ? `<p><strong>Balance Due:</strong> ₹${invoice.balance_due.toLocaleString()}</p>` : ''}
           </div>
           <div class="footer">
-            <p>Sahaa Traders | Quality Groceries Since 1990</p>
+            <p>Saha Traders | Quality Groceries Since 1990</p>
           </div>
         </div>
       </body>
@@ -255,7 +255,7 @@ const templates = {
   }),
 
   lowStockAlert: (items) => ({
-    subject: 'Low Stock Alert - Sahaa Traders Admin',
+    subject: 'Low Stock Alert - Saha Traders Admin',
     html: `
       <!DOCTYPE html>
       <html>
@@ -290,7 +290,7 @@ const templates = {
             <p>Please restock these items soon.</p>
           </div>
           <div class="footer">
-            <p>Sahaa Traders Admin System</p>
+            <p>Saha Traders Admin System</p>
           </div>
         </div>
       </body>
@@ -332,7 +332,7 @@ const templates = {
             <p>Please respond to this enquiry at your earliest.</p>
           </div>
           <div class="footer">
-            <p>Sahaa Traders Admin System</p>
+            <p>Saha Traders Admin System</p>
           </div>
         </div>
       </body>
@@ -341,7 +341,7 @@ const templates = {
   }),
 
   enquiryAutoReply: (enquiry) => ({
-    subject: 'Thank you for your enquiry - Sahaa Traders',
+    subject: 'Thank you for your enquiry - Saha Traders',
     html: `
       <!DOCTYPE html>
       <html>
@@ -357,7 +357,7 @@ const templates = {
       <body>
         <div class="container">
           <div class="header">
-            <h1>Sahaa Traders</h1>
+            <h1>Saha Traders</h1>
           </div>
           <div class="content">
             <p>Hi ${enquiry.name},</p>
@@ -367,11 +367,11 @@ const templates = {
             <p><strong>Your message:</strong></p>
             <p style="background: white; padding: 15px; border-radius: 4px;">${enquiry.message}</p>
 
-            <p>In the meantime, feel free to browse our products at <a href="https://sahaatraders.com">sahaatraders.com</a></p>
+            <p>In the meantime, feel free to browse our products at <a href="https://sahatraders.in">sahatraders.in</a></p>
           </div>
           <div class="footer">
-            <p>Sahaa Traders | Quality Groceries Since 1990</p>
-            <p>Phone: +91 98765 43210 | Email: support@sahaatraders.com</p>
+            <p>Saha Traders | Quality Groceries Since 1990</p>
+            <p>Phone: +91 98765 43210 | Email: support@sahatraders.in</p>
           </div>
         </div>
       </body>
@@ -387,7 +387,7 @@ const sendEmail = async (to, templateName, data, attachments = []) => {
     const template = templates[templateName](data);
 
     const mailOptions = {
-      from: `"Sahaa Traders" <${process.env.SMTP_USER}>`,
+      from: `"Saha Traders" <${process.env.SMTP_USER}>`,
       to,
       subject: template.subject,
       html: template.html,

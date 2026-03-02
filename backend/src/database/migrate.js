@@ -87,6 +87,17 @@ CREATE TABLE IF NOT EXISTS product_images (
   FOREIGN KEY (variant_id) REFERENCES product_variants(id) ON DELETE SET NULL
 );
 
+-- Category images table
+CREATE TABLE IF NOT EXISTS category_images (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  category_id INT NOT NULL,
+  url VARCHAR(500) NOT NULL,
+  alt_text VARCHAR(200),
+  sort_order INT DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
+);
+
 -- Suppliers table
 CREATE TABLE IF NOT EXISTS suppliers (
   id INT PRIMARY KEY AUTO_INCREMENT,
@@ -188,10 +199,13 @@ CREATE TABLE IF NOT EXISTS purchase_order_items (
 CREATE TABLE IF NOT EXISTS sales_orders (
   id INT PRIMARY KEY AUTO_INCREMENT,
   order_number VARCHAR(50) UNIQUE NOT NULL,
+  customer_id INT,
   customer_name VARCHAR(200) NOT NULL,
   customer_phone VARCHAR(20),
   customer_email VARCHAR(255),
   status ENUM('enquiry', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled') DEFAULT 'enquiry',
+  payment_method VARCHAR(50) DEFAULT 'cod',
+  payment_status VARCHAR(50) DEFAULT 'pending',
   subtotal DECIMAL(12,2) DEFAULT 0,
   tax_amount DECIMAL(10,2) DEFAULT 0,
   shipping_amount DECIMAL(10,2) DEFAULT 0,
@@ -207,6 +221,7 @@ CREATE TABLE IF NOT EXISTS sales_orders (
   assigned_to INT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL,
   FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE SET NULL
 );
 
@@ -390,7 +405,18 @@ CREATE TABLE IF NOT EXISTS banners (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
--- Create indexes for better performance
+-- Order status history table
+CREATE TABLE IF NOT EXISTS order_status_history (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  sales_order_id INT NOT NULL,
+  status VARCHAR(50) NOT NULL,
+  note TEXT,
+  created_by INT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (sales_order_id) REFERENCES sales_orders(id) ON DELETE CASCADE
+);
+
+-- Create indexes for better performance (ignore if already exist)
 CREATE INDEX idx_products_category ON products(category_id);
 CREATE INDEX idx_products_slug ON products(slug);
 CREATE INDEX idx_variants_product ON product_variants(product_id);
@@ -398,6 +424,7 @@ CREATE INDEX idx_stock_movements_variant ON stock_movements(variant_id);
 CREATE INDEX idx_sales_orders_status ON sales_orders(status);
 CREATE INDEX idx_invoices_status ON invoices(status);
 CREATE INDEX idx_enquiries_status ON enquiries(status);
+CREATE INDEX idx_category_images_category ON category_images(category_id);
 `;
 
 async function runMigrations() {

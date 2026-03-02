@@ -313,7 +313,7 @@ router.put('/:id/process',
       for (const item of items) {
         // Update variant stock
         await connection.query(`
-          UPDATE product_variants SET stock_quantity = stock_quantity + ?
+          UPDATE product_variants SET stock_qty = stock_qty + ?
           WHERE id = ?
         `, [item.quantity, item.variant_id]);
 

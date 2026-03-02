@@ -2,19 +2,21 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
-import { Card, Select, Pagination, Spin, Empty, Tag, Breadcrumb } from 'antd';
-import { HomeOutlined } from '@ant-design/icons';
+import SafeImage from '@/components/common/SafeImage';
+import { Card, Select, Pagination, Spin, Empty, Tag, Breadcrumb, Button } from 'antd';
+import { HomeOutlined, ShoppingCartOutlined } from '@ant-design/icons';
 import { getCategoryBySlug, getProducts } from '@/lib/api';
 import { getImageUrl, getPriceRange, isInStock } from '@/lib/utils';
+import { useCart } from '@/context/CartContext';
 
 const { Option } = Select;
 
-const PLACEHOLDER_IMAGE = 'https://placehold.co/300x300/f3f4f6/9ca3af?text=Product';
-const PLACEHOLDER_CATEGORY_IMAGE = 'https://placehold.co/200x200/f3f4f6/9ca3af?text=Category';
+const PLACEHOLDER_IMAGE = '/images/placeholder-product.svg';
+const PLACEHOLDER_CATEGORY_IMAGE = '/images/placeholder-category.svg';
 
 export default function CategoryPage({ params }) {
   const { slug } = params;
+  const { addToCart } = useCart();
   const [category, setCategory] = useState(null);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -32,8 +34,7 @@ export default function CategoryPage({ params }) {
         // Fetch products for this category
         if (categoryRes.data) {
           const productsRes = await getProducts({
-            category_id: categoryRes.data.id,
-            is_active: true
+            category: categoryRes.data.id,
           });
           setProducts(productsRes.data || []);
           setPagination(prev => ({ ...prev, total: productsRes.data?.length || 0 }));
@@ -91,34 +92,40 @@ export default function CategoryPage({ params }) {
       {/* Hero */}
       <div className="hero-gradient text-white py-12">
         <div className="container-custom text-center">
-          {(category.image_url || category.image) ? (
-            <div className="w-24 h-24 mx-auto mb-4 relative rounded-full overflow-hidden bg-white">
-              <Image
-                src={getImageUrl(category.image_url || category.image, PLACEHOLDER_CATEGORY_IMAGE)}
-                alt={category.name}
-                fill
-                className="object-cover"
-                onError={(e) => {
-                  e.target.src = PLACEHOLDER_CATEGORY_IMAGE;
-                }}
-              />
-            </div>
-          ) : (
-            <div className="w-24 h-24 mx-auto mb-4 relative rounded-full overflow-hidden bg-white flex items-center justify-center">
-              <Image
-                src={PLACEHOLDER_CATEGORY_IMAGE}
-                alt={category.name}
-                fill
-                className="object-contain p-4"
-              />
-            </div>
-          )}
+          <div className="w-24 h-24 mx-auto mb-4 relative rounded-full overflow-hidden bg-white">
+            <SafeImage
+              src={getImageUrl(category.images?.[0]?.url || category.image_url, PLACEHOLDER_CATEGORY_IMAGE)}
+              fallback={PLACEHOLDER_CATEGORY_IMAGE}
+              alt={category.name}
+              fill
+              className={category.images?.[0]?.url || category.image_url ? "object-cover" : "object-contain p-4"}
+            />
+          </div>
           <h1 className="text-3xl md:text-4xl font-bold mb-4">{category.name}</h1>
           <p className="text-white/90 max-w-2xl mx-auto">
             {category.description || 'Quality products in this category'}
           </p>
         </div>
       </div>
+
+      {/* Category Images Gallery */}
+      {category.images?.length > 1 && (
+        <div className="container-custom py-6">
+          <div className="flex gap-4 overflow-x-auto pb-2">
+            {category.images.map((img, idx) => (
+              <div key={img.id || idx} className="flex-shrink-0 w-40 h-40 relative rounded-lg overflow-hidden bg-gray-100">
+                <SafeImage
+                  src={getImageUrl(img.url, PLACEHOLDER_CATEGORY_IMAGE)}
+                  fallback={PLACEHOLDER_CATEGORY_IMAGE}
+                  alt={`${category.name} ${idx + 1}`}
+                  fill
+                  className="object-cover"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Products */}
       <div className="container-custom py-8">
@@ -150,7 +157,7 @@ export default function CategoryPage({ params }) {
                 .map((product) => {
                   const priceRange = getPriceRange(product.variants);
                   const inStock = isInStock(product.variants);
-                  const productImage = product.images?.[0]?.image_url || product.image;
+                  const productImage = product.images?.[0]?.url || product.image;
 
                   return (
                     <Link key={product.id} href={`/products/${product.slug}`}>
@@ -158,14 +165,12 @@ export default function CategoryPage({ params }) {
                         className="product-card h-full cursor-pointer overflow-hidden"
                         cover={
                           <div className="bg-gray-100 h-48 flex items-center justify-center relative">
-                            <Image
+                            <SafeImage
                               src={getImageUrl(productImage, PLACEHOLDER_IMAGE)}
+                              fallback={PLACEHOLDER_IMAGE}
                               alt={product.name}
                               fill
                               className="object-cover"
-                              onError={(e) => {
-                                e.target.src = PLACEHOLDER_IMAGE;
-                              }}
                             />
                             {!inStock && (
                               <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
@@ -191,8 +196,19 @@ export default function CategoryPage({ params }) {
                               </span>
                             )}
                           </div>
-                          {inStock && (
-                            <span className="badge-in-stock">In Stock</span>
+                          {inStock && product.variants?.[0] && (
+                            <Button
+                              type="primary"
+                              size="small"
+                              icon={<ShoppingCartOutlined />}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                addToCart(product.variants[0].id, 1);
+                              }}
+                            >
+                              Add
+                            </Button>
                           )}
                         </div>
                       </Card>

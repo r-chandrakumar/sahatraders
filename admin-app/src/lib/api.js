@@ -1,7 +1,7 @@
 import axios from 'axios';
 import Cookies from 'js-cookie';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.sahatrades.in/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.sahatraders.in/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -224,17 +224,6 @@ export const adjustStock = async (data) => {
 
 export const getLowStockAlerts = async () => {
   const response = await api.get('/admin/inventory/alerts/low-stock');
-  return response.data;
-};
-
-// Enquiries
-export const getEnquiries = async (params = {}) => {
-  const response = await api.get('/enquiries', { params });
-  return response.data;
-};
-
-export const updateEnquiry = async (id, data) => {
-  const response = await api.put(`/enquiries/${id}`, data);
   return response.data;
 };
 

@@ -240,7 +240,7 @@ router.post('/', authenticate, authorize('super_admin', 'admin'), [
     }
 
     const {
-      sku, name, description, category_id, brand, type,
+      sku, name, description, category_id, brand, type, supplier_id,
       default_image, seo_title, seo_description
     } = req.body;
 
@@ -256,9 +256,9 @@ router.post('/', authenticate, authorize('super_admin', 'admin'), [
     }
 
     const [result] = await pool.query(
-      `INSERT INTO products (sku, name, slug, description, category_id, brand, type, default_image, seo_title, seo_description)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [sku, name, slug, description, category_id, brand, type || 'inhouse', default_image, seo_title, seo_description]
+      `INSERT INTO products (sku, name, slug, description, category_id, brand, type, supplier_id, default_image, seo_title, seo_description)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [sku, name, slug, description, category_id, brand, type || 'inhouse', supplier_id || null, default_image, seo_title, seo_description]
     );
 
     const [newProduct] = await pool.query('SELECT * FROM products WHERE id = ?', [result.insertId]);
@@ -280,7 +280,7 @@ router.put('/:id', authenticate, authorize('super_admin', 'admin'), async (req, 
   try {
     const { id } = req.params;
     const {
-      sku, name, description, category_id, brand, type,
+      sku, name, description, category_id, brand, type, supplier_id,
       default_image, seo_title, seo_description, is_active
     } = req.body;
 
@@ -303,12 +303,13 @@ router.put('/:id', authenticate, authorize('super_admin', 'admin'), async (req, 
         category_id = ?,
         brand = COALESCE(?, brand),
         type = COALESCE(?, type),
+        supplier_id = ?,
         default_image = COALESCE(?, default_image),
         seo_title = COALESCE(?, seo_title),
         seo_description = COALESCE(?, seo_description),
         is_active = COALESCE(?, is_active)
        WHERE id = ?`,
-      [sku, name, slug, description, category_id, brand, type, default_image, seo_title, seo_description, is_active, id]
+      [sku, name, slug, description, category_id, brand, type, supplier_id || null, default_image, seo_title, seo_description, is_active, id]
     );
 
     const [updated] = await pool.query('SELECT * FROM products WHERE id = ?', [id]);

@@ -25,6 +25,7 @@ import {
 } from '@ant-design/icons';
 import { useAuth } from '@/context/AuthContext';
 import api from '@/lib/api';
+import { getImageUrl } from '@/lib/utils';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
 
@@ -216,13 +217,12 @@ export default function AccountPage() {
                 <Card key={item.id} size="small">
                   <div className="flex gap-4">
                     <div className="w-20 h-20 bg-gray-100 rounded-lg overflow-hidden">
-                      {item.image ? (
-                        <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <ShoppingOutlined className="text-gray-400" />
-                        </div>
-                      )}
+                      <img
+                        src={getImageUrl(item.image)}
+                        alt={item.name}
+                        className="w-full h-full object-cover"
+                        onError={(e) => { e.target.style.display = 'none'; }}
+                      />
                     </div>
                     <div className="flex-1">
                       <Link href={`/products/${item.slug}`}>

@@ -4,6 +4,7 @@ const { body, validationResult } = require('express-validator');
 const pool = require('../config/database');
 const { authenticate, authorize } = require('../middleware/auth.middleware');
 const { formatResponse, paginate, generateOrderNumber } = require('../utils/helpers');
+const { sendEmail } = require('../services/email.service');
 
 // Get all sales orders
 router.get('/', authenticate, async (req, res, next) => {
@@ -263,10 +264,30 @@ router.put('/:id/status', authenticate, authorize('super_admin', 'admin', 'sales
     }
 
     await connection.query('UPDATE sales_orders SET status = ? WHERE id = ?', [status, id]);
+
+    // Log status change in history
+    await connection.query(
+      'INSERT INTO order_status_history (sales_order_id, status, created_by) VALUES (?, ?, ?)',
+      [id, status, req.user.id]
+    );
+
     await connection.commit();
 
     const [updated] = await pool.query('SELECT * FROM sales_orders WHERE id = ?', [id]);
-    res.json(formatResponse(updated[0]));
+    const updatedOrder = updated[0];
+
+    // Send email notification for shipped/delivered (fire-and-forget)
+    if (updatedOrder.customer_email) {
+      if (status === 'shipped') {
+        sendEmail(updatedOrder.customer_email, 'orderShipped', updatedOrder)
+          .catch(err => console.error('Shipped email error:', err));
+      } else if (status === 'delivered') {
+        sendEmail(updatedOrder.customer_email, 'orderDelivered', updatedOrder)
+          .catch(err => console.error('Delivered email error:', err));
+      }
+    }
+
+    res.json(formatResponse(updatedOrder));
   } catch (error) {
     await connection.rollback();
     next(error);
@@ -303,6 +324,70 @@ router.put('/:id', authenticate, authorize('super_admin', 'admin', 'sales_clerk'
 
     const [updated] = await pool.query('SELECT * FROM sales_orders WHERE id = ?', [id]);
     res.json(formatResponse(updated[0]));
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Send email notification for an order
+router.post('/:id/notify', authenticate, authorize('super_admin', 'admin', 'sales_clerk'), async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { type } = req.body; // 'confirmation', 'shipped', 'delivered'
+
+    const [orders] = await pool.query('SELECT * FROM sales_orders WHERE id = ?', [id]);
+    if (!orders.length) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    const order = orders[0];
+
+    if (!order.customer_email) {
+      return res.status(400).json({ success: false, message: 'Customer email not available' });
+    }
+
+    // Get order items for confirmation email
+    let items = [];
+    if (type === 'confirmation') {
+      const [orderItems] = await pool.query(
+        'SELECT product_name, variant_name, quantity, unit_price FROM sales_order_items WHERE sales_order_id = ?',
+        [id]
+      );
+      items = orderItems;
+    }
+
+    let templateName;
+    switch (type) {
+      case 'confirmation':
+        templateName = 'orderConfirmation';
+        break;
+      case 'shipped':
+        templateName = 'orderShipped';
+        break;
+      case 'delivered':
+        templateName = 'orderDelivered';
+        break;
+      default:
+        return res.status(400).json({ success: false, message: 'Invalid notification type' });
+    }
+
+    const emailData = {
+      ...order,
+      items,
+      shipping_amount: parseFloat(order.shipping_amount) || 0,
+      subtotal: parseFloat(order.subtotal) || 0,
+      tax_amount: parseFloat(order.tax_amount) || 0,
+      discount_amount: parseFloat(order.discount_amount) || 0,
+      total_amount: parseFloat(order.total_amount) || 0,
+    };
+
+    const result = await sendEmail(order.customer_email, templateName, emailData);
+
+    if (result.success) {
+      res.json({ success: true, message: `${type} email sent to ${order.customer_email}` });
+    } else {
+      res.status(500).json({ success: false, message: 'Failed to send email: ' + result.error });
+    }
   } catch (error) {
     next(error);
   }

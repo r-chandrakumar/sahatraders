@@ -10,6 +10,11 @@ const nextConfig = {
       },
       {
         protocol: 'https',
+        hostname: 'api.sahatraders.in',
+        pathname: '/uploads/**',
+      },
+      {
+        protocol: 'https',
         hostname: 'placehold.co',
         pathname: '/**',
       },
@@ -19,7 +24,7 @@ const nextConfig = {
     return [
       {
         source: '/api/:path*',
-        destination: 'https://api.sahatrades.in/api/:path*',
+        destination: (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api') + '/:path*',
       },
     ];
   },

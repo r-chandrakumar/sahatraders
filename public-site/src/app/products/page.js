@@ -2,19 +2,21 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
+import SafeImage from '@/components/common/SafeImage';
 import { useSearchParams } from 'next/navigation';
-import { Card, Select, Input, Slider, Checkbox, Pagination, Spin, Empty, Tag, Breadcrumb } from 'antd';
-import { SearchOutlined, FilterOutlined, HomeOutlined } from '@ant-design/icons';
+import { Card, Select, Input, Slider, Checkbox, Pagination, Spin, Empty, Tag, Breadcrumb, Button } from 'antd';
+import { SearchOutlined, FilterOutlined, HomeOutlined, ShoppingCartOutlined } from '@ant-design/icons';
 import { getProducts, getCategories } from '@/lib/api';
 import { getImageUrl, getPriceRange, isInStock } from '@/lib/utils';
+import { useCart } from '@/context/CartContext';
 
 const { Option } = Select;
 
-const PLACEHOLDER_IMAGE = 'https://placehold.co/300x300/f3f4f6/9ca3af?text=Product';
+const PLACEHOLDER_IMAGE = '/images/placeholder-product.svg';
 
 export default function ProductsPage() {
   const searchParams = useSearchParams();
+  const { addToCart } = useCart();
   const [products, setProducts] = useState([]);
   const [allProducts, setAllProducts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -227,7 +229,7 @@ export default function ProductsPage() {
                     .map((product) => {
                       const priceRange = getPriceRange(product.variants);
                       const inStock = isInStock(product.variants);
-                      const productImage = product.images?.[0]?.image_url || product.image;
+                      const productImage = product.images?.[0]?.url || product.image;
 
                       return (
                         <Link key={product.id} href={`/products/${product.slug}`}>
@@ -235,14 +237,12 @@ export default function ProductsPage() {
                             className="product-card h-full cursor-pointer overflow-hidden"
                             cover={
                               <div className="bg-gray-100 h-48 flex items-center justify-center relative">
-                                <Image
+                                <SafeImage
                                   src={getImageUrl(productImage, PLACEHOLDER_IMAGE)}
+                                  fallback={PLACEHOLDER_IMAGE}
                                   alt={product.name}
                                   fill
                                   className="object-cover"
-                                  onError={(e) => {
-                                    e.target.src = PLACEHOLDER_IMAGE;
-                                  }}
                                 />
                                 {!inStock && (
                                   <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
@@ -268,8 +268,19 @@ export default function ProductsPage() {
                                   </span>
                                 )}
                               </div>
-                              {inStock && (
-                                <span className="badge-in-stock">In Stock</span>
+                              {inStock && product.variants?.[0] && (
+                                <Button
+                                  type="primary"
+                                  size="small"
+                                  icon={<ShoppingCartOutlined />}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    addToCart(product.variants[0].id, 1);
+                                  }}
+                                >
+                                  Add
+                                </Button>
                               )}
                             </div>
                           </Card>

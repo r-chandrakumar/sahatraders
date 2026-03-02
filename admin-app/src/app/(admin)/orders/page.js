@@ -10,6 +10,7 @@ import {
   FileTextOutlined,
   MoreOutlined,
   FilterOutlined,
+  SendOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import toast from 'react-hot-toast';
@@ -18,7 +19,6 @@ import api from '@/lib/api';
 const { RangePicker } = DatePicker;
 
 const statusColors = {
-  enquiry: 'blue',
   confirmed: 'gold',
   processing: 'orange',
   shipped: 'purple',
@@ -28,7 +28,6 @@ const statusColors = {
 
 const statusOptions = [
   { value: '', label: 'All Status' },
-  { value: 'enquiry', label: 'Enquiry' },
   { value: 'confirmed', label: 'Confirmed' },
   { value: 'processing', label: 'Processing' },
   { value: 'shipped', label: 'Shipped' },
@@ -91,9 +90,18 @@ export default function OrdersPage() {
     fetchOrders();
   }, [pagination.current, pagination.pageSize, filters.status, filters.search]);
 
+  const handleSendNotification = async (orderId, type) => {
+    try {
+      const response = await api.post(`/admin/sales-orders/${orderId}/notify`, { type });
+      toast.success(response.data?.message || 'Notification sent');
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to send notification');
+    }
+  };
+
   const handleStatusChange = async (orderId, newStatus) => {
     try {
-      await api.put(`/api/orders/${orderId}/status`, { status: newStatus });
+      await api.put(`/admin/sales-orders/${orderId}/status`, { status: newStatus });
 
       // Update local state
       setOrders(orders.map(o =>
@@ -180,10 +188,21 @@ export default function OrdersPage() {
                 },
               },
               {
+                key: 'notify',
+                icon: <SendOutlined />,
+                label: 'Send Notification',
+                disabled: !record.customer_email,
+                onClick: () => {
+                  const type = record.status === 'delivered' ? 'delivered'
+                    : record.status === 'shipped' ? 'shipped' : 'confirmation';
+                  handleSendNotification(record.id, type);
+                },
+              },
+              {
                 key: 'invoice',
                 icon: <FileTextOutlined />,
                 label: 'Create Invoice',
-                disabled: record.status === 'enquiry' || record.status === 'cancelled',
+                disabled: record.status === 'cancelled',
               },
             ],
           }}
@@ -208,7 +227,7 @@ export default function OrdersPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
           <h1 className="page-title">Sales Orders</h1>
-          <p className="page-subtitle">Manage customer orders and enquiries</p>
+          <p className="page-subtitle">Manage customer orders</p>
         </div>
         <Link href="/orders/new">
           <Button type="primary">Create Order</Button>

@@ -5,104 +5,82 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   Card, Button, Tag, Table, Descriptions, Space, Modal, Form, Input,
-  InputNumber, Switch, Upload, Tabs, Dropdown, Image, message
+  InputNumber, Switch, Upload, Tabs, Dropdown, Spin
 } from 'antd';
 import {
   ArrowLeftOutlined, EditOutlined, DeleteOutlined, PlusOutlined,
-  MoreOutlined, UploadOutlined, SaveOutlined
+  MoreOutlined, SaveOutlined
 } from '@ant-design/icons';
 import toast from 'react-hot-toast';
+import api from '@/lib/api';
 
 const { TextArea } = Input;
+const { Option } = require('antd/es/select');
 
-// Sample product data
-const sampleProduct = {
-  id: 1,
-  sku: 'CUM001',
-  name: 'Cumin Seeds',
-  slug: 'cumin-seeds',
-  description: 'Premium quality cumin seeds sourced from the best farms in Rajasthan. Our cumin seeds are carefully selected for their rich aroma and authentic flavor. Perfect for Indian cooking, these seeds add a distinctive warm, earthy flavor to your dishes.',
-  category_id: 1,
-  category_name: 'Spices',
-  brand: 'Sahaa Premium',
-  type: 'inhouse',
-  is_active: true,
-  default_image: null,
-  seo_title: 'Buy Premium Cumin Seeds Online',
-  seo_description: 'Order high-quality cumin seeds at best prices',
-  created_at: '2025-01-15',
-  updated_at: '2025-12-01',
-  variants: [
-    { id: 1, sku: 'CUM001-100G', variant_name: '100g Pack', buy_price: 25, sell_price: 40, compare_price: 50, stock_qty: 150, low_stock_threshold: 20, weight: 100, weight_unit: 'g', is_active: true },
-    { id: 2, sku: 'CUM001-250G', variant_name: '250g Pack', buy_price: 60, sell_price: 95, compare_price: 120, stock_qty: 80, low_stock_threshold: 15, weight: 250, weight_unit: 'g', is_active: true },
-    { id: 3, sku: 'CUM001-500G', variant_name: '500g Pack', buy_price: 115, sell_price: 180, compare_price: 230, stock_qty: 5, low_stock_threshold: 10, weight: 500, weight_unit: 'g', is_active: true },
-    { id: 4, sku: 'CUM001-1KG', variant_name: '1kg Pack', buy_price: 220, sell_price: 340, compare_price: 420, stock_qty: 0, low_stock_threshold: 5, weight: 1000, weight_unit: 'g', is_active: false },
-  ],
-  images: [
-    { id: 1, url: '/placeholder1.jpg', alt_text: 'Cumin Seeds Pack', sort_order: 0 },
-    { id: 2, url: '/placeholder2.jpg', alt_text: 'Cumin Seeds Close-up', sort_order: 1 },
-  ],
-  stock_movements: [
-    { id: 1, variant_name: '250g Pack', change_qty: -10, reason: 'sale', created_at: '2025-12-05T10:30:00' },
-    { id: 2, variant_name: '100g Pack', change_qty: 50, reason: 'purchase_receipt', created_at: '2025-12-04T14:00:00' },
-    { id: 3, variant_name: '500g Pack', change_qty: -8, reason: 'sale', created_at: '2025-12-03T11:20:00' },
-  ]
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'https://api.sahatraders.in/api').replace(/\/api$/, '');
+
+const getFullUrl = (url) => {
+  if (!url) return null;
+  if (url.startsWith('http')) return url;
+  return `${API_BASE}${url}`;
 };
-
-const categories = [
-  { value: 1, label: 'Spices' },
-  { value: 2, label: 'Oils' },
-  { value: 3, label: 'Grains & Pulses' },
-  { value: 4, label: 'Dry Fruits' },
-];
 
 export default function ProductDetailPage({ params }) {
   const router = useRouter();
-  const [product, setProduct] = useState(sampleProduct);
-  const [loading, setLoading] = useState(false);
-  const [editMode, setEditMode] = useState(false);
+  const [product, setProduct] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [variantModal, setVariantModal] = useState({ visible: false, variant: null });
-  const [form] = Form.useForm();
   const [variantForm] = Form.useForm();
 
-  const handleSaveProduct = async (values) => {
-    setLoading(true);
+  useEffect(() => {
+    fetchProduct();
+  }, [params.id]);
+
+  const fetchProduct = async () => {
     try {
-      setProduct({ ...product, ...values });
-      toast.success('Product updated successfully');
-      setEditMode(false);
+      const response = await api.get(`/products/${params.id}`);
+      setProduct(response.data.data);
     } catch (error) {
-      toast.error('Failed to update product');
+      console.error('Failed to fetch product:', error);
+      toast.error('Failed to load product');
     } finally {
       setLoading(false);
     }
   };
 
+  const handleDeleteProduct = () => {
+    Modal.confirm({
+      title: 'Delete Product',
+      content: 'Are you sure you want to delete this product? This action cannot be undone.',
+      okText: 'Delete',
+      okType: 'danger',
+      onOk: async () => {
+        try {
+          await api.delete(`/admin/products/${params.id}`);
+          toast.success('Product deleted');
+          router.push('/products');
+        } catch (error) {
+          toast.error(error.response?.data?.message || 'Failed to delete product');
+        }
+      },
+    });
+  };
+
   const handleSaveVariant = async (values) => {
-    if (variantModal.variant) {
-      // Update existing variant
-      setProduct({
-        ...product,
-        variants: product.variants.map(v =>
-          v.id === variantModal.variant.id ? { ...v, ...values } : v
-        )
-      });
-      toast.success('Variant updated');
-    } else {
-      // Add new variant
-      const newVariant = {
-        id: product.variants.length + 1,
-        ...values,
-        stock_qty: values.stock_qty || 0,
-      };
-      setProduct({
-        ...product,
-        variants: [...product.variants, newVariant]
-      });
-      toast.success('Variant added');
+    try {
+      if (variantModal.variant) {
+        await api.put(`/admin/products/${params.id}/variants/${variantModal.variant.id}`, values);
+        toast.success('Variant updated');
+      } else {
+        await api.post(`/admin/products/${params.id}/variants`, values);
+        toast.success('Variant added');
+      }
+      setVariantModal({ visible: false, variant: null });
+      variantForm.resetFields();
+      fetchProduct();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to save variant');
     }
-    setVariantModal({ visible: false, variant: null });
-    variantForm.resetFields();
   };
 
   const handleDeleteVariant = (variantId) => {
@@ -111,15 +89,69 @@ export default function ProductDetailPage({ params }) {
       content: 'Are you sure you want to delete this variant?',
       okText: 'Delete',
       okType: 'danger',
-      onOk: () => {
-        setProduct({
-          ...product,
-          variants: product.variants.filter(v => v.id !== variantId)
-        });
-        toast.success('Variant deleted');
+      onOk: async () => {
+        try {
+          await api.delete(`/admin/products/${params.id}/variants/${variantId}`);
+          toast.success('Variant deleted');
+          fetchProduct();
+        } catch (error) {
+          toast.error(error.response?.data?.message || 'Failed to delete variant');
+        }
       },
     });
   };
+
+  const handleImageUpload = async (file) => {
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+      const uploadRes = await api.post('/admin/upload/image?type=products', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      await api.post(`/admin/products/${params.id}/images`, {
+        url: uploadRes.data.data.url,
+        alt_text: product.name,
+        sort_order: (product.images || []).length,
+      });
+      toast.success('Image uploaded');
+      fetchProduct();
+    } catch (error) {
+      toast.error('Failed to upload image');
+    }
+    return false;
+  };
+
+  const handleDeleteImage = async (imageId) => {
+    try {
+      await api.delete(`/admin/products/${params.id}/images/${imageId}`);
+      toast.success('Image removed');
+      fetchProduct();
+    } catch (error) {
+      toast.error('Failed to remove image');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Spin size="large" />
+      </div>
+    );
+  }
+
+  if (!product) {
+    return (
+      <div className="text-center py-12">
+        <h2 className="text-xl text-gray-600">Product not found</h2>
+        <Link href="/products">
+          <Button type="primary" className="mt-4">Back to Products</Button>
+        </Link>
+      </div>
+    );
+  }
+
+  const variants = product.variants || [];
+  const images = product.images || [];
 
   const variantColumns = [
     {
@@ -135,20 +167,20 @@ export default function ProductDetailPage({ params }) {
     {
       title: 'Weight',
       key: 'weight',
-      render: (_, record) => `${record.weight}${record.weight_unit}`,
+      render: (_, record) => `${record.weight || 0}${record.weight_unit || 'g'}`,
     },
     {
       title: 'Buy Price',
       dataIndex: 'buy_price',
       key: 'buy_price',
-      render: (price) => `₹${price}`,
+      render: (price) => `₹${price || 0}`,
     },
     {
       title: 'Sell Price',
       key: 'sell_price',
       render: (_, record) => (
         <div>
-          <span className="font-medium">₹{record.sell_price}</span>
+          <span className="font-medium">₹{record.sell_price || 0}</span>
           {record.compare_price && (
             <span className="text-gray-400 line-through ml-2">₹{record.compare_price}</span>
           )}
@@ -159,12 +191,16 @@ export default function ProductDetailPage({ params }) {
       title: 'Stock',
       dataIndex: 'stock_qty',
       key: 'stock',
-      render: (qty, record) => (
-        <span className={qty <= record.low_stock_threshold ? 'text-red-600 font-medium' : ''}>
-          {qty}
-          {qty <= record.low_stock_threshold && <Tag color="red" className="ml-2">Low</Tag>}
-        </span>
-      ),
+      render: (qty, record) => {
+        const q = qty || 0;
+        const threshold = record.low_stock_threshold || 10;
+        return (
+          <span className={q <= threshold ? 'text-red-600 font-medium' : ''}>
+            {q}
+            {q <= threshold && <Tag color="red" className="ml-2">Low</Tag>}
+          </span>
+        );
+      },
     },
     {
       title: 'Status',
@@ -209,40 +245,10 @@ export default function ProductDetailPage({ params }) {
     },
   ];
 
-  const movementColumns = [
-    {
-      title: 'Date',
-      dataIndex: 'created_at',
-      key: 'date',
-      render: (date) => new Date(date).toLocaleString(),
-    },
-    {
-      title: 'Variant',
-      dataIndex: 'variant_name',
-      key: 'variant',
-    },
-    {
-      title: 'Change',
-      dataIndex: 'change_qty',
-      key: 'change',
-      render: (qty) => (
-        <span className={qty > 0 ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>
-          {qty > 0 ? '+' : ''}{qty}
-        </span>
-      ),
-    },
-    {
-      title: 'Reason',
-      dataIndex: 'reason',
-      key: 'reason',
-      render: (reason) => <Tag>{reason.replace('_', ' ').toUpperCase()}</Tag>,
-    },
-  ];
-
   const tabItems = [
     {
       key: 'variants',
-      label: `Variants (${product.variants.length})`,
+      label: `Variants (${variants.length})`,
       children: (
         <div>
           <div className="flex justify-end mb-4">
@@ -258,7 +264,7 @@ export default function ProductDetailPage({ params }) {
             </Button>
           </div>
           <Table
-            dataSource={product.variants}
+            dataSource={variants}
             columns={variantColumns}
             rowKey="id"
             pagination={false}
@@ -268,24 +274,19 @@ export default function ProductDetailPage({ params }) {
     },
     {
       key: 'images',
-      label: `Images (${product.images.length})`,
+      label: `Images (${images.length})`,
       children: (
         <div>
           <Upload
             listType="picture-card"
-            fileList={product.images.map(img => ({
-              uid: img.id,
-              name: img.alt_text,
+            fileList={images.map(img => ({
+              uid: String(img.id),
+              name: img.alt_text || 'image',
               status: 'done',
-              url: img.url,
+              url: getFullUrl(img.url),
             }))}
-            beforeUpload={() => false}
-            onRemove={(file) => {
-              setProduct({
-                ...product,
-                images: product.images.filter(img => img.id !== file.uid)
-              });
-            }}
+            beforeUpload={handleImageUpload}
+            onRemove={(file) => handleDeleteImage(parseInt(file.uid))}
           >
             <div>
               <PlusOutlined />
@@ -295,19 +296,14 @@ export default function ProductDetailPage({ params }) {
         </div>
       ),
     },
-    {
-      key: 'stock_history',
-      label: 'Stock History',
-      children: (
-        <Table
-          dataSource={product.stock_movements}
-          columns={movementColumns}
-          rowKey="id"
-          pagination={{ pageSize: 10 }}
-        />
-      ),
-    },
   ];
+
+  const totalStock = variants.reduce((sum, v) => sum + (v.stock_qty || 0), 0);
+  const stockValue = variants.reduce((sum, v) => sum + ((v.stock_qty || 0) * (v.buy_price || 0)), 0);
+  const lowStockCount = variants.filter(v => (v.stock_qty || 0) <= (v.low_stock_threshold || 10)).length;
+  const sellPrices = variants.map(v => v.sell_price || 0).filter(p => p > 0);
+  const minPrice = sellPrices.length > 0 ? Math.min(...sellPrices) : 0;
+  const maxPrice = sellPrices.length > 0 ? Math.max(...sellPrices) : 0;
 
   return (
     <div>
@@ -319,7 +315,7 @@ export default function ProductDetailPage({ params }) {
           </Link>
           <h1 className="page-title">{product.name}</h1>
           <div className="flex items-center gap-2 mt-1">
-            <Tag>{product.category_name}</Tag>
+            {product.category_name && <Tag>{product.category_name}</Tag>}
             <Tag color={product.type === 'inhouse' ? 'blue' : 'purple'}>
               {product.type === 'inhouse' ? 'In-house' : 'Supplier'}
             </Tag>
@@ -329,18 +325,14 @@ export default function ProductDetailPage({ params }) {
           </div>
         </div>
         <Space>
-          {editMode ? (
-            <>
-              <Button onClick={() => setEditMode(false)}>Cancel</Button>
-              <Button type="primary" icon={<SaveOutlined />} onClick={() => form.submit()} loading={loading}>
-                Save Changes
-              </Button>
-            </>
-          ) : (
-            <Button type="primary" icon={<EditOutlined />} onClick={() => setEditMode(true)}>
+          <Button danger onClick={handleDeleteProduct}>
+            Delete
+          </Button>
+          <Link href={`/products/${params.id}/edit`}>
+            <Button type="primary" icon={<EditOutlined />}>
               Edit Product
             </Button>
-          )}
+          </Link>
         </Space>
       </div>
 
@@ -349,63 +341,18 @@ export default function ProductDetailPage({ params }) {
         <div className="lg:col-span-2 space-y-6">
           {/* Basic Info */}
           <Card title="Product Information">
-            {editMode ? (
-              <Form
-                form={form}
-                layout="vertical"
-                initialValues={product}
-                onFinish={handleSaveProduct}
-              >
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <Form.Item name="name" label="Product Name" rules={[{ required: true }]}>
-                    <Input />
-                  </Form.Item>
-                  <Form.Item name="sku" label="SKU" rules={[{ required: true }]}>
-                    <Input />
-                  </Form.Item>
-                </div>
-                <Form.Item name="description" label="Description">
-                  <TextArea rows={4} />
-                </Form.Item>
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <Form.Item name="category_id" label="Category">
-                    <select className="w-full border rounded px-3 py-2">
-                      {categories.map(cat => (
-                        <option key={cat.value} value={cat.value}>{cat.label}</option>
-                      ))}
-                    </select>
-                  </Form.Item>
-                  <Form.Item name="brand" label="Brand">
-                    <Input />
-                  </Form.Item>
-                </div>
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <Form.Item name="type" label="Type">
-                    <select className="w-full border rounded px-3 py-2">
-                      <option value="inhouse">In-house</option>
-                      <option value="supplier">Supplier</option>
-                      <option value="both">Both</option>
-                    </select>
-                  </Form.Item>
-                  <Form.Item name="is_active" label="Active" valuePropName="checked">
-                    <Switch />
-                  </Form.Item>
-                </div>
-              </Form>
-            ) : (
-              <Descriptions column={{ xs: 1, sm: 2 }} bordered size="small">
-                <Descriptions.Item label="SKU">{product.sku}</Descriptions.Item>
-                <Descriptions.Item label="Category">{product.category_name}</Descriptions.Item>
-                <Descriptions.Item label="Brand">{product.brand || '-'}</Descriptions.Item>
-                <Descriptions.Item label="Type">{product.type}</Descriptions.Item>
-                <Descriptions.Item label="Description" span={2}>{product.description}</Descriptions.Item>
-                <Descriptions.Item label="Created">{new Date(product.created_at).toLocaleDateString()}</Descriptions.Item>
-                <Descriptions.Item label="Updated">{new Date(product.updated_at).toLocaleDateString()}</Descriptions.Item>
-              </Descriptions>
-            )}
+            <Descriptions column={{ xs: 1, sm: 2 }} bordered size="small">
+              <Descriptions.Item label="SKU">{product.sku}</Descriptions.Item>
+              <Descriptions.Item label="Category">{product.category_name || '-'}</Descriptions.Item>
+              <Descriptions.Item label="Brand">{product.brand || '-'}</Descriptions.Item>
+              <Descriptions.Item label="Type">{product.type}</Descriptions.Item>
+              <Descriptions.Item label="Description" span={2}>{product.description || '-'}</Descriptions.Item>
+              <Descriptions.Item label="Created">{product.created_at ? new Date(product.created_at).toLocaleDateString() : '-'}</Descriptions.Item>
+              <Descriptions.Item label="Updated">{product.updated_at ? new Date(product.updated_at).toLocaleDateString() : '-'}</Descriptions.Item>
+            </Descriptions>
           </Card>
 
-          {/* Variants, Images, History */}
+          {/* Variants, Images */}
           <Card>
             <Tabs items={tabItems} />
           </Card>
@@ -413,30 +360,36 @@ export default function ProductDetailPage({ params }) {
 
         {/* Sidebar */}
         <div className="space-y-6">
+          {/* Product Image Preview */}
+          {images.length > 0 && (
+            <Card title="Primary Image">
+              <img
+                src={getFullUrl(images[0].url)}
+                alt={product.name}
+                className="w-full rounded object-cover"
+                style={{ maxHeight: 250 }}
+              />
+            </Card>
+          )}
+
           {/* Stock Summary */}
           <Card title="Stock Summary">
             <div className="space-y-3">
               <div className="flex justify-between">
                 <span className="text-gray-500">Total Variants</span>
-                <span className="font-medium">{product.variants.length}</span>
+                <span className="font-medium">{variants.length}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Total Stock</span>
-                <span className="font-medium">
-                  {product.variants.reduce((sum, v) => sum + v.stock_qty, 0)} units
-                </span>
+                <span className="font-medium">{totalStock} units</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Stock Value</span>
-                <span className="font-medium">
-                  ₹{product.variants.reduce((sum, v) => sum + (v.stock_qty * v.buy_price), 0).toLocaleString()}
-                </span>
+                <span className="font-medium">₹{stockValue.toLocaleString()}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Low Stock Items</span>
-                <span className="font-medium text-red-600">
-                  {product.variants.filter(v => v.stock_qty <= v.low_stock_threshold).length}
-                </span>
+                <span className="font-medium text-red-600">{lowStockCount}</span>
               </div>
             </div>
           </Card>
@@ -446,42 +399,27 @@ export default function ProductDetailPage({ params }) {
             <div className="space-y-3">
               <div className="flex justify-between">
                 <span className="text-gray-500">Min Price</span>
-                <span className="font-medium">
-                  ₹{Math.min(...product.variants.map(v => v.sell_price))}
-                </span>
+                <span className="font-medium">₹{minPrice}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Max Price</span>
-                <span className="font-medium">
-                  ₹{Math.max(...product.variants.map(v => v.sell_price))}
-                </span>
+                <span className="font-medium">₹{maxPrice}</span>
               </div>
             </div>
           </Card>
 
           {/* SEO */}
           <Card title="SEO Settings">
-            {editMode ? (
-              <Form form={form} layout="vertical">
-                <Form.Item name="seo_title" label="SEO Title">
-                  <Input />
-                </Form.Item>
-                <Form.Item name="seo_description" label="SEO Description">
-                  <TextArea rows={2} />
-                </Form.Item>
-              </Form>
-            ) : (
-              <div className="space-y-3">
-                <div>
-                  <div className="text-gray-500 text-sm">SEO Title</div>
-                  <div>{product.seo_title || '-'}</div>
-                </div>
-                <div>
-                  <div className="text-gray-500 text-sm">SEO Description</div>
-                  <div>{product.seo_description || '-'}</div>
-                </div>
+            <div className="space-y-3">
+              <div>
+                <div className="text-gray-500 text-sm">SEO Title</div>
+                <div>{product.seo_title || '-'}</div>
               </div>
-            )}
+              <div>
+                <div className="text-gray-500 text-sm">SEO Description</div>
+                <div>{product.seo_description || '-'}</div>
+              </div>
+            </div>
           </Card>
         </div>
       </div>
@@ -516,13 +454,7 @@ export default function ProductDetailPage({ params }) {
               <InputNumber className="w-full" min={0} />
             </Form.Item>
             <Form.Item name="weight_unit" label="Unit">
-              <select className="w-full border rounded px-3 py-2">
-                <option value="g">Grams (g)</option>
-                <option value="kg">Kilograms (kg)</option>
-                <option value="ml">Milliliters (ml)</option>
-                <option value="l">Liters (l)</option>
-                <option value="pcs">Pieces (pcs)</option>
-              </select>
+              <Input placeholder="g" />
             </Form.Item>
             <Form.Item name="low_stock_threshold" label="Low Stock Alert">
               <InputNumber className="w-full" min={0} />

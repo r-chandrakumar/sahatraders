@@ -16,6 +16,13 @@ import toast from 'react-hot-toast';
 import api from '@/lib/api';
 
 const { Option } = Select;
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'https://api.sahatraders.in/api').replace(/\/api$/, '');
+
+const getFullUrl = (url) => {
+  if (!url) return null;
+  if (url.startsWith('http')) return url;
+  return `${API_BASE}${url}`;
+};
 
 export default function ProductsPage() {
   const [products, setProducts] = useState([]);
@@ -109,10 +116,24 @@ export default function ProductsPage() {
     {
       title: 'Product',
       key: 'product',
-      render: (_, record) => (
+      render: (_, record) => {
+        const firstImg = record.images?.[0];
+        const imgUrl = firstImg ? getFullUrl(firstImg.url) : (record.default_image ? getFullUrl(record.default_image) : null);
+        return (
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-gray-100 rounded flex items-center justify-center">
-            <span className="text-2xl">📦</span>
+          {imgUrl ? (
+            <img
+              src={imgUrl}
+              alt={record.name}
+              className="w-12 h-12 rounded object-cover"
+              onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+            />
+          ) : null}
+          <div
+            className="w-12 h-12 rounded bg-gray-100 flex items-center justify-center text-gray-400 text-xs flex-shrink-0"
+            style={{ display: imgUrl ? 'none' : 'flex' }}
+          >
+            No img
           </div>
           <div>
             <Link href={`/products/${record.id}`} className="font-medium text-gray-900 hover:text-blue-600">
@@ -121,7 +142,8 @@ export default function ProductsPage() {
             <div className="text-sm text-gray-500">SKU: {record.sku}</div>
           </div>
         </div>
-      ),
+        );
+      },
     },
     {
       title: 'Category',

@@ -75,10 +75,10 @@ export default function NewSalesOrderPage() {
                 product_name: product.name,
                 variant_name: variant.variant_name,
                 sku: variant.sku,
-                price: parseFloat(variant.selling_price) || 0,
-                cost_price: parseFloat(variant.cost_price) || 0,
-                stock: parseInt(variant.stock_quantity) || 0,
-                tax: 18, // Default GST
+                price: parseFloat(variant.sell_price) || 0,
+                cost_price: parseFloat(variant.buy_price) || 0,
+                stock: parseInt(variant.stock_qty) || 0,
+                tax: parseFloat(variant.tax_percent) || 0,
               });
             }
           });

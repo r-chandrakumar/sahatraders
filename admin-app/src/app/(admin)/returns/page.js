@@ -43,87 +43,6 @@ const typeColors = {
   credit_note: 'cyan',
 };
 
-// Sample returns data
-const sampleReturns = [
-  {
-    id: 1,
-    return_number: 'RET-202512-0012',
-    order_number: 'SO-202512-0085',
-    customer_name: 'Ramesh Patel',
-    type: 'return',
-    status: 'pending',
-    total_amount: 2500,
-    reason: 'Damaged packaging',
-    created_at: '2025-12-04T14:30:00',
-    items: [
-      { product_name: 'Premium Cumin Seeds', variant: '500g', quantity: 5, unit_price: 450, refund_amount: 2250 },
-    ],
-  },
-  {
-    id: 2,
-    return_number: 'RET-202512-0011',
-    order_number: 'SO-202512-0080',
-    customer_name: 'Suresh Kumar',
-    type: 'credit_note',
-    status: 'approved',
-    total_amount: 1500,
-    reason: 'Price adjustment',
-    created_at: '2025-12-03T10:15:00',
-    items: [],
-  },
-  {
-    id: 3,
-    return_number: 'RET-202512-0010',
-    order_number: 'SO-202512-0075',
-    customer_name: 'Meena Shop',
-    type: 'return',
-    status: 'processed',
-    total_amount: 3800,
-    reason: 'Wrong item delivered',
-    created_at: '2025-12-02T16:45:00',
-    items: [
-      { product_name: 'Black Pepper Premium', variant: '250g', quantity: 10, unit_price: 380, refund_amount: 3800 },
-    ],
-  },
-  {
-    id: 4,
-    return_number: 'RET-202512-0009',
-    order_number: 'SO-202512-0070',
-    customer_name: 'Ajay Stores',
-    type: 'return',
-    status: 'rejected',
-    total_amount: 900,
-    reason: 'Quality issue claim',
-    rejection_reason: 'Product was opened and used',
-    created_at: '2025-12-01T11:20:00',
-    items: [
-      { product_name: 'Groundnut Oil', variant: '5L', quantity: 1, unit_price: 980, refund_amount: 900 },
-    ],
-  },
-];
-
-// Sample orders for creating new returns
-const sampleOrders = [
-  {
-    id: 85,
-    order_number: 'SO-202512-0085',
-    customer_name: 'Ramesh Patel',
-    total: 15000,
-    items: [
-      { id: 1, product_name: 'Premium Cumin Seeds', variant: '500g', quantity: 20, unit_price: 450 },
-      { id: 2, product_name: 'Black Pepper Premium', variant: '250g', quantity: 10, unit_price: 380 },
-    ],
-  },
-  {
-    id: 80,
-    order_number: 'SO-202512-0080',
-    customer_name: 'Suresh Kumar',
-    total: 8500,
-    items: [
-      { id: 3, product_name: 'California Almonds', variant: '500g', quantity: 8, unit_price: 750 },
-    ],
-  },
-];
 
 export default function ReturnsPage() {
   const [returns, setReturns] = useState([]);
@@ -134,6 +53,9 @@ export default function ReturnsPage() {
   const [processModal, setProcessModal] = useState({ visible: false, item: null });
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [returnItems, setReturnItems] = useState([]);
+  const [deliveredOrders, setDeliveredOrders] = useState([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [orderDetailLoading, setOrderDetailLoading] = useState(false);
   const [form] = Form.useForm();
 
   // Fetch returns on mount
@@ -157,12 +79,13 @@ export default function ReturnsPage() {
   const handleCreateReturn = async (values) => {
     try {
       const payload = {
-        order_id: selectedOrder.id,
+        sales_order_id: selectedOrder.id,
         type: values.type,
         reason: values.reason,
         items: returnItems.filter(i => i.quantity > 0).map(i => ({
-          item_id: i.item_id,
+          variant_id: i.variant_id,
           quantity: i.quantity,
+          unit_price: i.unit_price,
           refund_amount: i.refund_amount,
         })),
       };
@@ -189,15 +112,15 @@ export default function ReturnsPage() {
 
       switch (action) {
         case 'approve':
-          await api.put(`/api/returns/${id}/approve`);
+          await api.put(`/admin/returns/${id}/approve`);
           successMessage = 'Return approved successfully';
           break;
         case 'reject':
-          await api.put(`/api/returns/${id}/reject`, { rejection_reason: rejectionReason });
+          await api.put(`/admin/returns/${id}/reject`, { rejection_reason: rejectionReason });
           successMessage = 'Return rejected';
           break;
         case 'process':
-          await api.put(`/api/returns/${id}/process`);
+          await api.put(`/admin/returns/${id}/process`);
           successMessage = 'Return processed and stock updated';
           break;
         default:
@@ -215,14 +138,50 @@ export default function ReturnsPage() {
     }
   };
 
-  const handleOrderSelect = (orderId) => {
-    const order = sampleOrders.find(o => o.id === orderId);
-    setSelectedOrder(order);
+  const fetchDeliveredOrders = async () => {
+    try {
+      setOrdersLoading(true);
+      const response = await api.get('/admin/sales-orders?status=delivered&limit=100');
+      setDeliveredOrders(response.data.data || []);
+    } catch (error) {
+      console.error('Failed to fetch delivered orders:', error);
+      toast.error('Failed to load delivered orders');
+    } finally {
+      setOrdersLoading(false);
+    }
+  };
+
+  const handleOrderSelect = async (orderId) => {
+    setSelectedOrder(null);
     setReturnItems([]);
+    try {
+      setOrderDetailLoading(true);
+      const response = await api.get(`/admin/sales-orders/${orderId}`);
+      const data = response.data.data;
+      setSelectedOrder({
+        id: data.id,
+        order_number: data.order_number,
+        customer_name: data.customer_name,
+        total: parseFloat(data.total_amount),
+        items: (data.items || []).map(item => ({
+          id: item.id,
+          variant_id: item.variant_id,
+          product_name: item.product_name,
+          variant: item.variant_name,
+          quantity: parseFloat(item.quantity),
+          unit_price: parseFloat(item.unit_price),
+        })),
+      });
+    } catch (error) {
+      console.error('Failed to fetch order details:', error);
+      toast.error('Failed to load order details');
+    } finally {
+      setOrderDetailLoading(false);
+    }
   };
 
   const addReturnItem = (item, quantity) => {
-    const existingIndex = returnItems.findIndex(i => i.item_id === item.id);
+    const existingIndex = returnItems.findIndex(i => i.variant_id === item.variant_id);
     if (existingIndex >= 0) {
       const updated = [...returnItems];
       updated[existingIndex].quantity = quantity;
@@ -232,7 +191,7 @@ export default function ReturnsPage() {
       setReturnItems([
         ...returnItems,
         {
-          item_id: item.id,
+          variant_id: item.variant_id,
           product_name: item.product_name,
           variant: item.variant,
           quantity,
@@ -364,7 +323,7 @@ export default function ReturnsPage() {
         <Button
           type="primary"
           icon={<PlusOutlined />}
-          onClick={() => setCreateModal(true)}
+          onClick={() => { setCreateModal(true); fetchDeliveredOrders(); }}
         >
           New Return
         </Button>
@@ -542,18 +501,23 @@ export default function ReturnsPage() {
             />
           </Form.Item>
 
-          <Form.Item label="Select Order" required>
+          <Form.Item label="Select Delivered Order" required>
             <Select
-              placeholder="Search order by number"
+              placeholder="Search order by number or customer"
               showSearch
-              optionFilterProp="children"
+              optionFilterProp="label"
               onChange={handleOrderSelect}
-              options={sampleOrders.map(o => ({
+              loading={ordersLoading}
+              options={deliveredOrders.map(o => ({
                 value: o.id,
                 label: `${o.order_number} - ${o.customer_name}`,
               }))}
             />
           </Form.Item>
+
+          {orderDetailLoading && (
+            <div className="text-center py-4"><Spin /> Loading order details...</div>
+          )}
 
           {selectedOrder && (
             <>
@@ -565,7 +529,7 @@ export default function ReturnsPage() {
               <div className="mb-4">
                 <div className="text-sm font-medium mb-2">Select Items to Return</div>
                 {selectedOrder.items.map((item) => {
-                  const returnItem = returnItems.find(ri => ri.item_id === item.id);
+                  const returnItem = returnItems.find(ri => ri.variant_id === item.variant_id);
                   return (
                     <div key={item.id} className="flex items-center gap-4 p-3 border rounded mb-2">
                       <div className="flex-1">

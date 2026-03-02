@@ -24,12 +24,16 @@ export default function EditProductPage({ params }) {
   const [saving, setSaving] = useState(false);
   const [product, setProduct] = useState(null);
   const [categories, setCategories] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
   const [variants, setVariants] = useState([]);
+  const [imageFiles, setImageFiles] = useState([]);
+  const [productType, setProductType] = useState('inhouse');
   const [variantModal, setVariantModal] = useState({ visible: false, variant: null });
 
   useEffect(() => {
     fetchProduct();
     fetchCategories();
+    fetchSuppliers();
   }, [params.id]);
 
   const fetchProduct = async () => {
@@ -38,6 +42,17 @@ export default function EditProductPage({ params }) {
       const productData = response.data.data;
       setProduct(productData);
       setVariants(productData.variants || []);
+      // Load existing images
+      const existingImages = (productData.images || []).map((img) => ({
+        uid: `existing_${img.id}`,
+        name: img.alt_text || 'image',
+        status: 'done',
+        url: img.url.startsWith('http') ? img.url : `${(process.env.NEXT_PUBLIC_API_URL || 'https://api.sahatraders.in/api').replace(/\/api$/, '')}${img.url}`,
+        imageId: img.id,
+        imageUrl: img.url,
+      }));
+      setImageFiles(existingImages);
+      setProductType(productData.type || 'inhouse');
       form.setFieldsValue({
         name: productData.name,
         sku: productData.sku,
@@ -45,6 +60,7 @@ export default function EditProductPage({ params }) {
         category_id: productData.category_id,
         brand: productData.brand,
         type: productData.type,
+        supplier_id: productData.supplier_id,
         is_active: productData.is_active,
         seo_title: productData.seo_title,
         seo_description: productData.seo_description,
@@ -66,13 +82,51 @@ export default function EditProductPage({ params }) {
     }
   };
 
+  const fetchSuppliers = async () => {
+    try {
+      const response = await api.get('/admin/suppliers');
+      setSuppliers(response.data.data || []);
+    } catch (error) {
+      console.error('Failed to fetch suppliers:', error);
+    }
+  };
+
   const handleSubmit = async (values) => {
     setSaving(true);
     try {
-      await api.put(`/products/${params.id}`, {
+      await api.put(`/admin/products/${params.id}`, {
         ...values,
-        variants: variants
       });
+
+      // Handle images: upload new ones, delete removed ones
+      const existingImageIds = imageFiles
+        .filter(f => f.imageId)
+        .map(f => f.imageId);
+
+      // Delete removed images
+      const originalImageIds = (product.images || []).map(img => img.id);
+      for (const imgId of originalImageIds) {
+        if (!existingImageIds.includes(imgId)) {
+          await api.delete(`/admin/products/${params.id}/images/${imgId}`);
+        }
+      }
+
+      // Upload new images
+      const newFiles = imageFiles.filter(f => !f.imageId && f.originFileObj);
+      for (let i = 0; i < newFiles.length; i++) {
+        const file = newFiles[i];
+        const formData = new FormData();
+        formData.append('image', file.originFileObj);
+        const uploadRes = await api.post('/admin/upload/image?type=products', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        await api.post(`/admin/products/${params.id}/images`, {
+          url: uploadRes.data.data.url,
+          alt_text: values.name || product.name,
+          sort_order: existingImageIds.length + i,
+        });
+      }
+
       toast.success('Product updated successfully');
       router.push('/products');
     } catch (error) {
@@ -289,7 +343,7 @@ export default function EditProductPage({ params }) {
               </div>
               <div className="grid sm:grid-cols-2 gap-4">
                 <Form.Item name="type" label="Product Type">
-                  <Select placeholder="Select type">
+                  <Select placeholder="Select type" onChange={(val) => setProductType(val)}>
                     <Option value="inhouse">In-house</Option>
                     <Option value="supplier">Supplier</Option>
                     <Option value="both">Both</Option>
@@ -299,6 +353,19 @@ export default function EditProductPage({ params }) {
                   <Switch checkedChildren="Active" unCheckedChildren="Inactive" />
                 </Form.Item>
               </div>
+              {(productType === 'supplier' || productType === 'both') && (
+                <Form.Item
+                  name="supplier_id"
+                  label="Supplier"
+                  rules={[{ required: productType === 'supplier', message: 'Please select a supplier' }]}
+                >
+                  <Select placeholder="Select supplier" allowClear showSearch optionFilterProp="children">
+                    {suppliers.map(s => (
+                      <Option key={s.id} value={s.id}>{s.name}</Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              )}
             </Card>
 
             {/* Variants */}
@@ -343,13 +410,20 @@ export default function EditProductPage({ params }) {
               <Upload
                 listType="picture-card"
                 multiple
+                fileList={imageFiles}
                 beforeUpload={() => false}
+                onChange={({ fileList }) => setImageFiles(fileList)}
               >
-                <div>
-                  <PlusOutlined />
-                  <div className="mt-2">Upload</div>
-                </div>
+                {imageFiles.length >= 5 ? null : (
+                  <div>
+                    <PlusOutlined />
+                    <div className="mt-2">Upload</div>
+                  </div>
+                )}
               </Upload>
+              <p className="text-gray-500 text-sm mt-2">
+                Max 5 images. JPG, PNG or WebP.
+              </p>
             </Card>
           </div>
         </div>

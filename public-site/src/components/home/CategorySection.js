@@ -2,13 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
+import SafeImage from '@/components/common/SafeImage';
 import { Card, Spin } from 'antd';
 import { RightOutlined } from '@ant-design/icons';
 import { getCategories } from '@/lib/api';
 import { getImageUrl } from '@/lib/utils';
 
-const PLACEHOLDER_IMAGE = 'https://placehold.co/200x200/f3f4f6/9ca3af?text=Category';
+const PLACEHOLDER_IMAGE = '/images/placeholder-category.svg';
 
 const categoryColors = [
   { bg: 'bg-orange-50', border: 'border-orange-200' },
@@ -82,14 +82,12 @@ const CategorySection = () => {
                 >
                   <div className="text-center">
                     <div className="w-20 h-20 mx-auto mb-4 relative rounded-full overflow-hidden bg-white">
-                      <Image
-                        src={getImageUrl(category.image_url || category.image, PLACEHOLDER_IMAGE)}
+                      <SafeImage
+                        src={getImageUrl(category.images?.[0]?.url || category.image_url, PLACEHOLDER_IMAGE)}
+                        fallback={PLACEHOLDER_IMAGE}
                         alt={category.name}
                         fill
                         className="object-cover"
-                        onError={(e) => {
-                          e.target.src = PLACEHOLDER_IMAGE;
-                        }}
                       />
                     </div>
                     <h3 className="text-xl font-semibold text-gray-900 mb-2">

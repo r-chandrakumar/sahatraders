@@ -2,13 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
+import SafeImage from '@/components/common/SafeImage';
 import { Card, Breadcrumb, Spin } from 'antd';
 import { HomeOutlined, RightOutlined } from '@ant-design/icons';
 import { getCategories } from '@/lib/api';
 import { getImageUrl } from '@/lib/utils';
 
-const PLACEHOLDER_IMAGE = 'https://placehold.co/200x200/f3f4f6/9ca3af?text=Category';
+const PLACEHOLDER_IMAGE = '/images/placeholder-category.svg';
 
 const categoryGradients = [
   'bg-gradient-to-br from-orange-100 to-red-100',
@@ -79,24 +79,13 @@ export default function CategoriesPage() {
                 bodyStyle={{ padding: 0 }}
               >
                 <div className={`${categoryGradients[index % categoryGradients.length]} h-48 flex items-center justify-center relative`}>
-                  {(category.image_url || category.image) ? (
-                    <Image
-                      src={getImageUrl(category.image_url || category.image, PLACEHOLDER_IMAGE)}
-                      alt={category.name}
-                      fill
-                      className="object-cover"
-                      onError={(e) => {
-                        e.target.src = PLACEHOLDER_IMAGE;
-                      }}
-                    />
-                  ) : (
-                    <Image
-                      src={PLACEHOLDER_IMAGE}
-                      alt={category.name}
-                      fill
-                      className="object-contain p-8"
-                    />
-                  )}
+                  <SafeImage
+                    src={getImageUrl(category.images?.[0]?.url || category.image_url, PLACEHOLDER_IMAGE)}
+                    fallback={PLACEHOLDER_IMAGE}
+                    alt={category.name}
+                    fill
+                    className={category.images?.[0]?.url || category.image_url ? "object-cover" : "object-contain p-8"}
+                  />
                 </div>
                 <div className="p-6">
                   <h3 className="text-xl font-bold text-gray-900 mb-2">{category.name}</h3>

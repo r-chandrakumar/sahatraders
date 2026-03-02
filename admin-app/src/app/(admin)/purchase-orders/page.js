@@ -2,13 +2,17 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Table, Button, Input, Select, Tag, Card, Space, Modal, Form, InputNumber, DatePicker } from 'antd';
+import { Table, Button, Input, Select, Tag, Card, Space, Modal, InputNumber, Dropdown } from 'antd';
 import {
   PlusOutlined,
   SearchOutlined,
   EyeOutlined,
   CheckOutlined,
   DownloadOutlined,
+  MoreOutlined,
+  SendOutlined,
+  CloseCircleOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import toast from 'react-hot-toast';
@@ -27,8 +31,8 @@ export default function PurchaseOrdersPage() {
   const [loading, setLoading] = useState(false);
   const [filters, setFilters] = useState({ search: '', status: '' });
   const [receiveModal, setReceiveModal] = useState({ visible: false, po: null, loading: false });
+  const [receiveQtys, setReceiveQtys] = useState({});
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0 });
-  const [form] = Form.useForm();
 
   // Fetch purchase orders on mount
   useEffect(() => {
@@ -54,9 +58,15 @@ export default function PurchaseOrdersPage() {
   const openReceiveModal = async (record) => {
     setReceiveModal({ visible: true, po: null, loading: true });
     try {
-      // Fetch PO details with items
       const response = await api.get(`/admin/purchase-orders/${record.id}`);
       const poData = response.data.data;
+      // Pre-fill remaining quantities
+      const qtys = {};
+      (poData.items || []).forEach((item) => {
+        const remaining = parseFloat(item.quantity) - parseFloat(item.received_qty || 0);
+        qtys[item.id] = remaining > 0 ? remaining : 0;
+      });
+      setReceiveQtys(qtys);
       setReceiveModal({ visible: true, po: poData, loading: false });
     } catch (error) {
       console.error('Failed to fetch PO details:', error);
@@ -65,34 +75,133 @@ export default function PurchaseOrdersPage() {
     }
   };
 
-  const handleReceive = async (values) => {
-    const { po_id, items } = values;
+  const handleReceive = async () => {
+    const po = receiveModal.po;
+    if (!po || !po.items) return;
 
-    // Convert items object to array (Ant Design form creates object with numeric keys)
-    const itemsArray = items ? Object.values(items).filter(item => item && item.received_qty > 0) : [];
+    // Collect quantities from receiveQtys state
+    const itemsToReceive = po.items
+      .map((item) => ({
+        item_id: item.id,
+        received_qty: receiveQtys[item.id] || 0,
+      }))
+      .filter((item) => item.received_qty > 0);
 
-    if (itemsArray.length === 0) {
+    if (itemsToReceive.length === 0) {
       toast.error('Please enter quantity for at least one item');
       return;
     }
 
     try {
-      setLoading(true);
-      // Call API to receive items (PUT request)
-      await api.put(`/admin/purchase-orders/${po_id}/receive`, { items: itemsArray });
+      setReceiveModal((prev) => ({ ...prev, loading: true }));
+      await api.put(`/admin/purchase-orders/${po.id}/receive`, { items: itemsToReceive });
 
       toast.success('Items received and stock updated');
       setReceiveModal({ visible: false, po: null, loading: false });
-      form.resetFields();
+      setReceiveQtys({});
 
-      // Refresh the purchase orders list
       await fetchPurchaseOrders();
     } catch (error) {
       console.error('Failed to receive items:', error);
-      toast.error('Failed to receive items');
-    } finally {
-      setLoading(false);
+      toast.error(error.response?.data?.message || 'Failed to receive items');
+      setReceiveModal((prev) => ({ ...prev, loading: false }));
     }
+  };
+
+  const handleStatusChange = (record, newStatus) => {
+    Modal.confirm({
+      title: `Change Status to ${newStatus.toUpperCase()}`,
+      content: `Are you sure you want to ${newStatus === 'ordered' ? 'mark as Ordered' : newStatus} this PO?`,
+      okText: 'Confirm',
+      okType: newStatus === 'cancelled' ? 'danger' : 'primary',
+      onOk: async () => {
+        try {
+          await api.put(`/admin/purchase-orders/${record.id}/status`, { status: newStatus });
+          toast.success(`Status updated to ${newStatus}`);
+          fetchPurchaseOrders();
+        } catch (error) {
+          toast.error(error.response?.data?.message || 'Failed to update status');
+        }
+      },
+    });
+  };
+
+  const handleDelete = (record) => {
+    Modal.confirm({
+      title: 'Delete Purchase Order',
+      content: 'Are you sure? Only draft POs can be deleted.',
+      okText: 'Delete',
+      okType: 'danger',
+      onOk: async () => {
+        try {
+          await api.delete(`/admin/purchase-orders/${record.id}`);
+          toast.success('Purchase order deleted');
+          fetchPurchaseOrders();
+        } catch (error) {
+          toast.error(error.response?.data?.message || 'Failed to delete');
+        }
+      },
+    });
+  };
+
+  const getActionMenuItems = (record) => {
+    const items = [
+      {
+        key: 'view',
+        icon: <EyeOutlined />,
+        label: <Link href={`/purchase-orders/${record.id}`}>View Details</Link>,
+      },
+    ];
+
+    if (record.status === 'draft') {
+      items.push(
+        { type: 'divider' },
+        {
+          key: 'order',
+          icon: <SendOutlined />,
+          label: 'Mark as Ordered',
+          onClick: () => handleStatusChange(record, 'ordered'),
+        },
+        {
+          key: 'cancel',
+          icon: <CloseCircleOutlined />,
+          label: 'Cancel',
+          danger: true,
+          onClick: () => handleStatusChange(record, 'cancelled'),
+        },
+        {
+          key: 'delete',
+          icon: <DeleteOutlined />,
+          label: 'Delete',
+          danger: true,
+          onClick: () => handleDelete(record),
+        },
+      );
+    }
+
+    if (record.status === 'ordered' || record.status === 'partial') {
+      items.push(
+        { type: 'divider' },
+        {
+          key: 'receive',
+          icon: <CheckOutlined />,
+          label: 'Receive Items',
+          onClick: () => openReceiveModal(record),
+        },
+      );
+    }
+
+    if (record.status === 'ordered') {
+      items.push({
+        key: 'cancel',
+        icon: <CloseCircleOutlined />,
+        label: 'Cancel',
+        danger: true,
+        onClick: () => handleStatusChange(record, 'cancelled'),
+      });
+    }
+
+    return items;
   };
 
   const columns = [
@@ -101,7 +210,9 @@ export default function PurchaseOrdersPage() {
       key: 'po',
       render: (_, record) => (
         <div>
-          <div className="font-medium text-blue-600">{record.po_number}</div>
+          <Link href={`/purchase-orders/${record.id}`} className="font-medium text-blue-600 hover:text-blue-800">
+            {record.po_number}
+          </Link>
           <div className="text-sm text-gray-500">{dayjs(record.created_at).format('DD MMM YYYY')}</div>
         </div>
       ),
@@ -134,21 +245,14 @@ export default function PurchaseOrdersPage() {
     {
       title: 'Actions',
       key: 'actions',
-      width: 150,
+      width: 100,
       render: (_, record) => (
-        <Space>
-          <Button type="text" icon={<EyeOutlined />} title="View Details" />
-          {(record.status === 'ordered' || record.status === 'partial') && (
-            <Button
-              type="primary"
-              size="small"
-              icon={<CheckOutlined />}
-              onClick={() => openReceiveModal(record)}
-            >
-              Receive
-            </Button>
-          )}
-        </Space>
+        <Dropdown
+          menu={{ items: getActionMenuItems(record) }}
+          trigger={['click']}
+        >
+          <Button type="text" icon={<MoreOutlined />} />
+        </Dropdown>
       ),
     },
   ];
@@ -247,64 +351,55 @@ export default function PurchaseOrdersPage() {
       <Modal
         title="Receive Items"
         open={receiveModal.visible}
-        onCancel={() => setReceiveModal({ visible: false, po: null, loading: false })}
+        onCancel={() => { setReceiveModal({ visible: false, po: null, loading: false }); setReceiveQtys({}); }}
         footer={null}
         width={600}
       >
         {receiveModal.loading && (
           <div className="text-center py-8">Loading purchase order details...</div>
         )}
-        {receiveModal.po && receiveModal.po.items && (
-          <Form
-            form={form}
-            layout="vertical"
-            onFinish={(values) => handleReceive({ po_id: receiveModal.po.id, ...values })}
-          >
+        {receiveModal.po && (
+          <>
             <div className="bg-gray-50 p-4 rounded-lg mb-4">
               <div className="font-medium">{receiveModal.po.po_number}</div>
               <div className="text-sm text-gray-500">{receiveModal.po.supplier_name}</div>
             </div>
 
-            <div className="mb-4">
-              <div className="text-sm font-medium mb-2">Items to Receive</div>
-              {receiveModal.po.items.map((item, index) => {
-                const remaining = item.quantity - item.received_qty;
-                return (
-                  <div key={item.id} className="flex items-center gap-4 p-3 border rounded mb-2">
-                    <div className="flex-1">
-                      <div className="font-medium">{item.product_name} - {item.variant_name}</div>
-                      <div className="text-sm text-gray-500">
-                        Ordered: {item.quantity} | Received: {item.received_qty} | Remaining: {remaining}
+            {receiveModal.po.items && receiveModal.po.items.length > 0 ? (
+              <>
+                <div className="mb-4">
+                  <div className="text-sm font-medium mb-2">Items to Receive</div>
+                  {receiveModal.po.items.map((item) => {
+                    const remaining = parseFloat(item.quantity) - parseFloat(item.received_qty || 0);
+                    return (
+                      <div key={item.id} className="flex items-center gap-4 p-3 border rounded mb-2">
+                        <div className="flex-1">
+                          <div className="font-medium">{item.product_name} - {item.variant_name}</div>
+                          <div className="text-sm text-gray-500">
+                            Ordered: {parseFloat(item.quantity)} | Received: {parseFloat(item.received_qty || 0)} | Remaining: {remaining}
+                          </div>
+                        </div>
+                        <InputNumber
+                          min={0}
+                          max={remaining}
+                          value={receiveQtys[item.id] || 0}
+                          onChange={(val) => setReceiveQtys((prev) => ({ ...prev, [item.id]: val || 0 }))}
+                          style={{ width: 100 }}
+                          disabled={remaining <= 0}
+                        />
                       </div>
-                    </div>
-                    <Form.Item
-                      name={['items', index, 'item_id']}
-                      initialValue={item.id}
-                      hidden
-                    >
-                      <Input />
-                    </Form.Item>
-                    <Form.Item
-                      name={['items', index, 'received_qty']}
-                      initialValue={remaining}
-                      className="mb-0"
-                    >
-                      <InputNumber min={0} max={remaining} style={{ width: 100 }} />
-                    </Form.Item>
-                  </div>
-                );
-              })}
-            </div>
+                    );
+                  })}
+                </div>
 
-            <Form.Item className="mb-0">
-              <Button type="primary" htmlType="submit" block>
-                Confirm Receipt
-              </Button>
-            </Form.Item>
-          </Form>
-        )}
-        {receiveModal.po && !receiveModal.po.items && !receiveModal.loading && (
-          <div className="text-center py-8 text-gray-500">No items found for this purchase order</div>
+                <Button type="primary" block onClick={handleReceive} loading={receiveModal.loading}>
+                  Confirm Receipt
+                </Button>
+              </>
+            ) : (
+              <div className="text-center py-8 text-gray-500">No items found for this purchase order</div>
+            )}
+          </>
         )}
       </Modal>
     </div>
